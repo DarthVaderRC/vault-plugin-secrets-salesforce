@@ -33,6 +33,7 @@ func newBackend() *backend {
 		BackendType: logical.TypeLogical,
 		Paths: framework.PathAppend(
 			pathInfo(b),
+			pathConfig(b),
 		),
 	}
 	return b
