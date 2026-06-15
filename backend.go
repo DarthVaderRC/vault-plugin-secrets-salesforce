@@ -34,6 +34,7 @@ func newBackend() *backend {
 		Paths: framework.PathAppend(
 			pathInfo(b),
 			pathConfig(b),
+			pathRoles(b),
 		),
 	}
 	return b
