@@ -70,6 +70,20 @@ func requestClientCredentialsToken(ctx context.Context, cfg *salesforceConfig, r
 	return doTokenRequest(ctx, cfg, form)
 }
 
+// requestJWTBearerToken performs the JWT Bearer grant: it signs an assertion
+// with the config private key and exchanges it for an access token.
+func requestJWTBearerToken(ctx context.Context, cfg *salesforceConfig, role *salesforceRole) (*tokenResult, error) {
+	assertion, err := buildJWTAssertion(cfg, role, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	form := url.Values{
+		"grant_type": {jwtBearerGrantType},
+		"assertion":  {assertion},
+	}
+	return doTokenRequest(ctx, cfg, form)
+}
+
 // doTokenRequest posts the form to the token endpoint and parses the result.
 func doTokenRequest(ctx context.Context, cfg *salesforceConfig, form url.Values) (*tokenResult, error) {
 	client, err := httpClientFor(cfg)

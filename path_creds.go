@@ -120,8 +120,7 @@ func (b *backend) mintToken(ctx context.Context, cfg *salesforceConfig, role *sa
 	case grantClientCredential:
 		return requestClientCredentialsToken(ctx, cfg, role)
 	case grantJWTBearer:
-		// Implemented in T9 (JWT Bearer flow).
-		return nil, fmt.Errorf("grant_type %q not yet implemented", role.GrantType)
+		return requestJWTBearerToken(ctx, cfg, role)
 	default:
 		return nil, fmt.Errorf("unsupported grant_type %q", role.GrantType)
 	}
