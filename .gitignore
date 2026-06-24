@@ -3,3 +3,6 @@ dist/
 *.pem
 vault-plugin-secrets-salesforce
 .env
+
+# Local secrets (JWT keypair for Salesforce e2e)
+.secrets/
