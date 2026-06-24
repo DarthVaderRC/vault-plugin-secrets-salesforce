@@ -39,6 +39,10 @@ type MockServer struct {
 	// mintDelay, if set, makes each token request sleep before issuing, to
 	// widen the race window in concurrency/anti-stampede tests.
 	mintDelay time.Duration
+	// transientFails, when > 0, makes the next N token requests return HTTP 503
+	// (decremented per request) before succeeding — used for retry tests.
+	transientFails int
+	transientCode  int
 }
 
 // New returns a started MockServer. Call Close when done.
@@ -102,6 +106,15 @@ func (m *MockServer) SetMintDelay(d time.Duration) {
 	m.mintDelay = d
 }
 
+// SetTransientFailures makes the next n token requests return the given HTTP
+// status (e.g. 503 or 429) before succeeding, for exercising retry/backoff.
+func (m *MockServer) SetTransientFailures(n, status int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.transientFails = n
+	m.transientCode = status
+}
+
 func (m *MockServer) handleToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -118,7 +131,20 @@ func (m *MockServer) handleToken(w http.ResponseWriter, r *http.Request) {
 	failMode := m.failMode
 	validator := m.assertionValidator
 	mintDelay := m.mintDelay
+	transient := 0
+	if m.transientFails > 0 {
+		m.transientFails--
+		transient = m.transientCode
+		if transient == 0 {
+			transient = http.StatusServiceUnavailable
+		}
+	}
 	m.mu.Unlock()
+
+	if transient != 0 {
+		http.Error(w, "transient failure", transient)
+		return
+	}
 
 	switch failMode {
 	case "":

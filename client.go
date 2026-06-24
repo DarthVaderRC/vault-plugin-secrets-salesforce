@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -85,33 +86,73 @@ func requestJWTBearerToken(ctx context.Context, cfg *salesforceConfig, role *sal
 	return doTokenRequest(ctx, cfg, form)
 }
 
-// doTokenRequest posts the form to the token endpoint and parses the result.
+// Retry policy for transient token-endpoint failures (network errors, HTTP 429,
+// and 5xx). Declared as vars so tests can shrink the backoff.
+var (
+	tokenRetryMaxAttempts = 3
+	tokenRetryBaseBackoff = 200 * time.Millisecond
+)
+
+// doTokenRequest posts the form to the token endpoint and parses the result,
+// retrying transient failures (network errors, HTTP 429, and 5xx) with
+// exponential backoff and jitter.
 func doTokenRequest(ctx context.Context, cfg *salesforceConfig, form url.Values) (*tokenResult, error) {
 	client, err := httpClientFor(cfg)
 	if err != nil {
 		return nil, err
 	}
 
+	var lastErr error
+	for attempt := 0; attempt < tokenRetryMaxAttempts; attempt++ {
+		if attempt > 0 {
+			backoff := tokenRetryBaseBackoff * time.Duration(1<<(attempt-1))
+			backoff += time.Duration(rand.Int63n(int64(backoff)/2 + 1)) // jitter
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		res, retryable, err := doTokenRequestOnce(ctx, client, cfg, form)
+		if err == nil {
+			return res, nil
+		}
+		lastErr = err
+		if !retryable {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+// doTokenRequestOnce performs a single token request. It returns retryable=true
+// when the failure is transient (network error, HTTP 429, or 5xx).
+func doTokenRequestOnce(ctx context.Context, client *http.Client, cfg *salesforceConfig, form url.Values) (*tokenResult, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.tokenURL(), strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("token request failed: %w", err)
+		// Network/transport errors are transient; retry unless the context ended.
+		if ctx.Err() != nil {
+			return nil, false, fmt.Errorf("token request failed: %w", err)
+		}
+		return nil, true, fmt.Errorf("token request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("reading token response: %w", err)
+		return nil, true, fmt.Errorf("reading token response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, parseTokenError(resp.StatusCode, body)
+		return nil, isRetryableStatus(resp.StatusCode), parseTokenError(resp.StatusCode, body)
 	}
 
 	var parsed struct {
@@ -122,10 +163,10 @@ func doTokenRequest(ctx context.Context, cfg *salesforceConfig, form url.Values)
 		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("decoding token response: %w", err)
+		return nil, false, fmt.Errorf("decoding token response: %w", err)
 	}
 	if parsed.AccessToken == "" {
-		return nil, fmt.Errorf("token response contained no access_token")
+		return nil, false, fmt.Errorf("token response contained no access_token")
 	}
 
 	return &tokenResult{
@@ -134,7 +175,13 @@ func doTokenRequest(ctx context.Context, cfg *salesforceConfig, form url.Values)
 		TokenType:   parsed.TokenType,
 		Scope:       parsed.Scope,
 		ExpiresIn:   parsed.ExpiresIn,
-	}, nil
+	}, false, nil
+}
+
+// isRetryableStatus reports whether an HTTP status warrants a retry: rate
+// limiting (429) and transient server errors (5xx).
+func isRetryableStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= 500
 }
 
 // parseTokenError maps a non-200 token response to a salesforceError, surfacing

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DarthVaderRC/vault-plugin-secrets-salesforce/internal/sftest"
 )
@@ -85,5 +86,72 @@ func TestClient_ClientCredentials_ServerError(t *testing.T) {
 	}
 	if sfErr, ok := err.(*salesforceError); !ok || sfErr.StatusCode != 500 {
 		t.Errorf("expected 500 salesforceError, got %v", err)
+	}
+}
+
+func TestClient_RetriesTransientThenSucceeds(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	m.SetTransientFailures(2, 503) // fail twice, then succeed on the 3rd attempt
+
+	old := tokenRetryBaseBackoff
+	tokenRetryBaseBackoff = time.Millisecond
+	defer func() { tokenRetryBaseBackoff = old }()
+
+	cfg := &salesforceConfig{LoginURL: m.URL(), TokenURL: m.TokenURL(), ClientID: "cid", ClientSecret: "secret"}
+	role := &salesforceRole{GrantType: grantClientCredential}
+
+	res, err := requestClientCredentialsToken(context.Background(), cfg, role)
+	if err != nil {
+		t.Fatalf("expected success after retries, got %v", err)
+	}
+	if res.AccessToken == "" {
+		t.Errorf("no access_token after retries")
+	}
+	if got := len(m.Requests()); got != 3 {
+		t.Errorf("expected 3 token requests (2 fail + 1 success), got %d", got)
+	}
+	if m.MintCount() != 1 {
+		t.Errorf("expected exactly 1 successful mint, got %d", m.MintCount())
+	}
+}
+
+func TestClient_DoesNotRetryNonTransient(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	m.SetFailMode("invalid_grant") // 400-class error, must not be retried
+
+	old := tokenRetryBaseBackoff
+	tokenRetryBaseBackoff = time.Millisecond
+	defer func() { tokenRetryBaseBackoff = old }()
+
+	cfg := &salesforceConfig{LoginURL: m.URL(), TokenURL: m.TokenURL(), ClientID: "cid", ClientSecret: "secret"}
+	role := &salesforceRole{GrantType: grantClientCredential}
+
+	if _, err := requestClientCredentialsToken(context.Background(), cfg, role); err == nil {
+		t.Fatal("expected error for invalid_grant")
+	}
+	if got := len(m.Requests()); got != 1 {
+		t.Errorf("non-transient error must not retry; expected 1 request, got %d", got)
+	}
+}
+
+func TestClient_RetriesExhaustedReturnsError(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	m.SetTransientFailures(99, 503) // always transient-fail
+
+	old := tokenRetryBaseBackoff
+	tokenRetryBaseBackoff = time.Millisecond
+	defer func() { tokenRetryBaseBackoff = old }()
+
+	cfg := &salesforceConfig{LoginURL: m.URL(), TokenURL: m.TokenURL(), ClientID: "cid", ClientSecret: "secret"}
+	role := &salesforceRole{GrantType: grantClientCredential}
+
+	if _, err := requestClientCredentialsToken(context.Background(), cfg, role); err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if got := len(m.Requests()); got != tokenRetryMaxAttempts {
+		t.Errorf("expected %d attempts, got %d", tokenRetryMaxAttempts, got)
 	}
 }
