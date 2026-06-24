@@ -17,13 +17,14 @@ const (
 // org/app. Secret fields (ClientSecret, PrivateKey) live only in the barrier and
 // are never returned by read operations.
 type salesforceConfig struct {
-	LoginURL      string `json:"login_url"`
-	TokenURL      string `json:"token_url"`
-	ClientID      string `json:"client_id"`
-	ClientSecret  string `json:"client_secret"`
-	PrivateKey    string `json:"private_key"`
-	CACert        string `json:"ca_cert"`
-	TLSSkipVerify bool   `json:"tls_skip_verify"`
+	LoginURL               string `json:"login_url"`
+	TokenURL               string `json:"token_url"`
+	ClientID               string `json:"client_id"`
+	ClientSecret           string `json:"client_secret"`
+	PrivateKey             string `json:"private_key"`
+	CACert                 string `json:"ca_cert"`
+	TLSSkipVerify          bool   `json:"tls_skip_verify"`
+	AllowNonSalesforceHost bool   `json:"allow_non_salesforce_host"`
 }
 
 // tokenURL returns the effective token endpoint, defaulting to
@@ -72,6 +73,11 @@ func pathConfig(b *backend) []*framework.Path {
 				"tls_skip_verify": {
 					Type:        framework.TypeBool,
 					Description: "Disable TLS verification (sandbox/testing only). Defaults to false.",
+					Default:     false,
+				},
+				"allow_non_salesforce_host": {
+					Type:        framework.TypeBool,
+					Description: "Allow the token endpoint to target a non-Salesforce host (e.g. a private gateway). Defaults to false, which restricts the host to *.salesforce.com / *.force.com (loopback is always allowed for testing).",
 					Default:     false,
 				},
 			},
@@ -154,12 +160,18 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, dat
 	if v, ok := data.GetOk("tls_skip_verify"); ok {
 		cfg.TLSSkipVerify = v.(bool)
 	}
+	if v, ok := data.GetOk("allow_non_salesforce_host"); ok {
+		cfg.AllowNonSalesforceHost = v.(bool)
+	}
 
 	if cfg.LoginURL == "" {
 		return logical.ErrorResponse("login_url is required"), nil
 	}
 	if cfg.ClientID == "" {
 		return logical.ErrorResponse("client_id is required"), nil
+	}
+	if err := validateTokenHost(cfg.tokenURL(), cfg.AllowNonSalesforceHost); err != nil {
+		return logical.ErrorResponse(err.Error()), nil
 	}
 
 	entry, err := logical.StorageEntryJSON(configStoragePrefix+name, cfg)
@@ -186,11 +198,12 @@ func (b *backend) pathConfigRead(ctx context.Context, req *logical.Request, data
 // redactedMap returns the config as a response map with secret fields redacted.
 func (c *salesforceConfig) redactedMap() map[string]interface{} {
 	m := map[string]interface{}{
-		"login_url":       c.LoginURL,
-		"token_url":       c.tokenURL(),
-		"client_id":       c.ClientID,
-		"ca_cert":         c.CACert,
-		"tls_skip_verify": c.TLSSkipVerify,
+		"login_url":                 c.LoginURL,
+		"token_url":                 c.tokenURL(),
+		"client_id":                 c.ClientID,
+		"ca_cert":                   c.CACert,
+		"tls_skip_verify":           c.TLSSkipVerify,
+		"allow_non_salesforce_host": c.AllowNonSalesforceHost,
 	}
 	if c.ClientSecret != "" {
 		m["client_secret"] = redactedValue
