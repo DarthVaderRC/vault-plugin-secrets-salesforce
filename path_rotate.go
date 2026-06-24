@@ -64,7 +64,7 @@ func (b *backend) pathRotate(ctx context.Context, req *logical.Request, data *fr
 	if err != nil {
 		return nil, err
 	}
-
+	b.Logger().Info("rotated salesforce token for role", "role", roleName, "expires_at", ct.ExpiresAt)
 	return &logical.Response{
 		Data: map[string]interface{}{
 			"rotated":    true,

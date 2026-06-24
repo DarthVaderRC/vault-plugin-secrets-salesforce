@@ -2,7 +2,7 @@ PLUGIN_NAME := vault-plugin-secrets-salesforce
 PKG := ./cmd/$(PLUGIN_NAME)
 DIST := dist
 
-.PHONY: build build-linux test testacc cover fmt vet clean
+.PHONY: build build-linux test testacc cover fmt vet deploy-sandbox clean
 
 ## build: compile the plugin for the host platform
 build:
@@ -32,6 +32,10 @@ fmt:
 ## vet: run go vet
 vet:
 	go vet ./...
+
+## deploy-sandbox: build + register + enable/reload in the lab Vault
+deploy-sandbox:
+	./scripts/deploy-sandbox.sh
 
 ## clean: remove build artifacts
 clean:

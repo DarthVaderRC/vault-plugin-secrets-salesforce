@@ -44,6 +44,7 @@ func (b *backend) secretAccessTokenRevoke(ctx context.Context, req *logical.Requ
 	if err := b.deleteCachedToken(ctx, req.Storage, role); err != nil {
 		return nil, err
 	}
+	b.Logger().Debug("revoked lease; cleared cached salesforce token", "role", role)
 	return nil, nil
 }
 

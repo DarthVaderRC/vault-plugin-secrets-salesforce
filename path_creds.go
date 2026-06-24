@@ -146,6 +146,8 @@ func (b *backend) mintAndCache(ctx context.Context, s logical.Storage, roleName 
 	if err := b.putCachedToken(ctx, s, roleName, ct); err != nil {
 		return nil, err
 	}
+	b.Logger().Debug("minted salesforce access token",
+		"role", roleName, "grant_type", role.GrantType, "expires_at", ct.ExpiresAt)
 	return ct, nil
 }
 
