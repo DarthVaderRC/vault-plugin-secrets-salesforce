@@ -37,6 +37,10 @@ vet:
 deploy-sandbox:
 	./scripts/deploy-sandbox.sh
 
+## release: cross-compile all supported platforms + checksums into dist/
+release:
+	./scripts/build-release.sh $(VERSION)
+
 ## clean: remove build artifacts
 clean:
 	rm -rf $(DIST)
