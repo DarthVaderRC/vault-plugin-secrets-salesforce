@@ -6,3 +6,6 @@ vault-plugin-secrets-salesforce
 
 # Local secrets (JWT keypair for Salesforce e2e)
 .secrets/
+
+# Coverage output
+coverage.out

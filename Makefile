@@ -2,7 +2,7 @@ PLUGIN_NAME := vault-plugin-secrets-salesforce
 PKG := ./cmd/$(PLUGIN_NAME)
 DIST := dist
 
-.PHONY: build build-linux test testacc fmt vet clean
+.PHONY: build build-linux test testacc cover fmt vet clean
 
 ## build: compile the plugin for the host platform
 build:
@@ -12,13 +12,18 @@ build:
 build-linux:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o $(DIST)/$(PLUGIN_NAME)_linux_arm64 $(PKG)
 
-## test: run unit tests
+## test: run unit tests (race detector)
 test:
-	go test ./...
+	go test -race ./...
 
 ## testacc: run acceptance tests (requires VAULT_ACC=1)
 testacc:
 	VAULT_ACC=1 go test ./... -v
+
+## cover: report test coverage
+cover:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out | tail -1
 
 ## fmt: format the code
 fmt:
