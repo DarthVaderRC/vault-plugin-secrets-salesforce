@@ -112,6 +112,14 @@ func (b *backend) issueToken(ctx context.Context, s logical.Storage, roleName st
 
 	ct, err := b.mintAndCache(ctx, s, roleName, cfg, role)
 	if err != nil {
+		// Graceful degradation: if minting fails (e.g. Salesforce is briefly
+		// unavailable) but the previously cached token is still valid (not yet
+		// past its true expiry), keep serving it instead of failing the read.
+		if existing, gErr := b.getCachedToken(ctx, s, roleName); gErr == nil && existing != nil && time.Now().Before(existing.ExpiresAt) {
+			b.Logger().Warn("salesforce token mint failed; serving still-valid cached token",
+				"role", roleName, "error", err.Error(), "expires_at", existing.ExpiresAt)
+			return existing, true, nil
+		}
 		return nil, false, err
 	}
 	return ct, false, nil

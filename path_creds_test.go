@@ -205,3 +205,45 @@ func TestCreds_ExpiryUsesTokenTTL(t *testing.T) {
 		t.Errorf("expires_at = %v, want ~%v (token_ttl-derived)", expiresAt, want)
 	}
 }
+
+// TestCreds_ServesStaleCacheWhenMintFails verifies graceful degradation: when a
+// token is past its renew-skew window (so a read tries to re-mint) but not yet
+// truly expired, and minting fails, the engine keeps serving the still-valid
+// cached token instead of erroring.
+func TestCreds_ServesStaleCacheWhenMintFails(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	// token_ttl 30s with the default 60s renew_skew => the token is "stale"
+	// immediately (every read tries to re-mint) but stays valid for ~30s.
+	b, storage := setupCC(t, m, "30s")
+
+	first := readCreds(t, b, storage)
+	firstToken := first.Data["access_token"].(string)
+
+	// Salesforce now rejects mints (non-retryable, fails fast).
+	m.SetFailMode("invalid_client")
+
+	resp := readCreds(t, b, storage) // must NOT error
+	if resp.Data["access_token"] != firstToken {
+		t.Errorf("expected still-valid cached token %q, got %v", firstToken, resp.Data["access_token"])
+	}
+	if resp.Data["cached"] != true {
+		t.Errorf("fallback token should be reported cached, got %v", resp.Data["cached"])
+	}
+}
+
+// TestCreds_ErrorsWhenMintFailsAndNoValidCache verifies that without a usable
+// cached token, a mint failure surfaces as an error.
+func TestCreds_ErrorsWhenMintFailsAndNoValidCache(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	m.SetFailMode("invalid_client")
+	b, storage := setupCC(t, m, "15m")
+
+	resp, err := b.HandleRequest(context.Background(), &logical.Request{
+		Operation: logical.ReadOperation, Path: "creds/cc", Storage: storage,
+	})
+	if err == nil && (resp == nil || !resp.IsError()) {
+		t.Fatalf("expected an error when minting fails with no cache, got resp=%v err=%v", resp, err)
+	}
+}
