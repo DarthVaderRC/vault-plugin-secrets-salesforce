@@ -79,6 +79,18 @@ single-cached-token-per-role design. **Verify the exact cap** against the curren
 *Connected Apps / OAuth* docs and your org's session settings before launch. Add a config
 note that aggressive `rotate`/no-cache usage can self-inflict 401s.
 
+**Measured (real-org E2E, 2026-06-24, Developer Edition):** Minting **8 tokens in a row**
+for the same user/app/scope via JWT Bearer (and separately Client Credentials) returned the
+**identical access token every time** — Salesforce **reuses the existing valid session token**
+rather than issuing new ones, and all 8 remained valid. **Conclusion:** under this engine's
+normal usage pattern (one run-as identity per role), you do **not** accumulate tokens toward
+any per-user/per-app cap, because repeated grants are de-duplicated **server-side**. The cap
+only becomes reachable if tokens are forced to be distinct (e.g. explicit `/revoke` between
+mints, or differing scopes). This **reinforces** the "no blocker" verdict and means even the
+caching layer's worst case (a brief thundering-herd of concurrent cold-cache reads) is largely
+absorbed by Salesforce's own token reuse — though the in-engine cache + a future mint mutex
+(Stage 2 / T11) remain the right design to avoid redundant auth round-trips.
+
 ## 3. "Token minting counts against the 24-hour API allocation" — Inaccurate premise
 
 **Original claim:** Token-minting requests count against tenant API allocations / trigger

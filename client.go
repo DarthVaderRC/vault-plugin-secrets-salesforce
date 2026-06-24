@@ -59,13 +59,14 @@ func httpClientFor(cfg *salesforceConfig) (*http.Client, error) {
 
 // requestClientCredentialsToken performs the client_credentials grant.
 func requestClientCredentialsToken(ctx context.Context, cfg *salesforceConfig, role *salesforceRole) (*tokenResult, error) {
+	// Salesforce's Client Credentials flow does NOT accept a "scope" request
+	// parameter — sending one fails with `invalid_request: scope parameter not
+	// supported`. The granted scopes are fixed by the Connected App's OAuth
+	// configuration, so role.Scopes is intentionally not forwarded here.
 	form := url.Values{
 		"grant_type":    {grantClientCredential},
 		"client_id":     {cfg.ClientID},
 		"client_secret": {cfg.ClientSecret},
-	}
-	if len(role.Scopes) > 0 {
-		form.Set("scope", strings.Join(role.Scopes, " "))
 	}
 	return doTokenRequest(ctx, cfg, form)
 }

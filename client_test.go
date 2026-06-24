@@ -42,8 +42,8 @@ func TestClient_ClientCredentials_Success(t *testing.T) {
 	if got["client_id"] != "cid" || got["client_secret"] != "secret" {
 		t.Errorf("client credentials not sent correctly: %v", got)
 	}
-	if got["scope"] != "api web" {
-		t.Errorf("scope = %q, want 'api web'", got["scope"])
+	if _, ok := got["scope"]; ok {
+		t.Errorf("scope must NOT be sent for client_credentials (Salesforce rejects it), got %q", got["scope"])
 	}
 }
 
