@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/helper/locksutil"
 	"github.com/hashicorp/vault/sdk/logical"
 )
 
@@ -85,15 +86,31 @@ func (b *backend) pathCredsRead(ctx context.Context, req *logical.Request, data 
 // issueToken returns a usable token for the role, serving the cached one when
 // still fresh and otherwise minting a new one and caching it. The bool reports
 // whether the returned token came from cache.
+//
+// Minting is guarded by a per-role lock so that a burst of concurrent reads on
+// a cold or expired cache results in a single token request to Salesforce (the
+// rest observe the freshly cached token), rather than a mint stampede.
 func (b *backend) issueToken(ctx context.Context, s logical.Storage, roleName string, cfg *salesforceConfig, role *salesforceRole) (*cachedToken, bool, error) {
-	now := time.Now()
-
+	// Fast path: serve a fresh cached token without taking the mint lock.
 	if ct, err := b.getCachedToken(ctx, s, roleName); err != nil {
 		return nil, false, err
-	} else if ct != nil && ct.fresh(now, role.RenewSkew) {
+	} else if ct != nil && ct.fresh(time.Now(), role.RenewSkew) {
 		return ct, true, nil
 	}
 
+	// Slow path: serialize minting per role.
+	lock := locksutil.LockForKey(b.locks, roleName)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Re-check under the lock: another goroutine may have minted while we waited.
+	if ct, err := b.getCachedToken(ctx, s, roleName); err != nil {
+		return nil, false, err
+	} else if ct != nil && ct.fresh(time.Now(), role.RenewSkew) {
+		return ct, true, nil
+	}
+
+	now := time.Now()
 	res, err := b.mintToken(ctx, cfg, role)
 	if err != nil {
 		return nil, false, err

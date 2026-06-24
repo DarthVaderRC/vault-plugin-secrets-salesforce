@@ -2,6 +2,8 @@ package salesforce
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -89,6 +91,50 @@ func TestCreds_SecondReadIsCached(t *testing.T) {
 	}
 	if m.MintCount() != 1 {
 		t.Errorf("expected exactly 1 mint with caching, got %d", m.MintCount())
+	}
+}
+
+// TestCreds_ConcurrentReadsMintOnce verifies the per-role mint lock prevents a
+// stampede: a burst of concurrent reads on a cold cache results in exactly one
+// token request to Salesforce.
+func TestCreds_ConcurrentReadsMintOnce(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	m.SetMintDelay(50 * time.Millisecond) // widen the race window
+	b, storage := setupCC(t, m, "15m")
+
+	const n = 25
+	var wg sync.WaitGroup
+	tokens := make([]string, n)
+	errs := make([]error, n)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			resp, err := b.HandleRequest(context.Background(), &logical.Request{
+				Operation: logical.ReadOperation, Path: "creds/cc", Storage: storage,
+			})
+			if err != nil || resp == nil || resp.IsError() {
+				errs[i] = fmt.Errorf("read %d failed: err=%v resp=%v", i, err, resp)
+				return
+			}
+			tokens[i], _ = resp.Data["access_token"].(string)
+		}(i)
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := m.MintCount(); got != 1 {
+		t.Errorf("expected exactly 1 mint under concurrency, got %d", got)
+	}
+	for i, tok := range tokens {
+		if tok == "" || tok != tokens[0] {
+			t.Errorf("read %d token = %q, want all reads to share %q", i, tok, tokens[0])
+		}
 	}
 }
 

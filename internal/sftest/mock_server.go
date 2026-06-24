@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"time"
 )
 
 // TokenResponse mirrors the subset of the Salesforce token response the engine
@@ -35,6 +36,9 @@ type MockServer struct {
 	instanceURL string
 	// assertionValidator, if set, validates the JWT assertion (jwt_bearer).
 	assertionValidator func(assertion string) error
+	// mintDelay, if set, makes each token request sleep before issuing, to
+	// widen the race window in concurrency/anti-stampede tests.
+	mintDelay time.Duration
 }
 
 // New returns a started MockServer. Call Close when done.
@@ -90,6 +94,14 @@ func (m *MockServer) MintCount() int {
 	return m.mintCounter
 }
 
+// SetMintDelay makes each token request sleep for d before issuing a token,
+// widening the race window for concurrency tests.
+func (m *MockServer) SetMintDelay(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mintDelay = d
+}
+
 func (m *MockServer) handleToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -105,6 +117,7 @@ func (m *MockServer) handleToken(w http.ResponseWriter, r *http.Request) {
 	m.requests = append(m.requests, form)
 	failMode := m.failMode
 	validator := m.assertionValidator
+	mintDelay := m.mintDelay
 	m.mu.Unlock()
 
 	switch failMode {
@@ -123,6 +136,10 @@ func (m *MockServer) handleToken(w http.ResponseWriter, r *http.Request) {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_grant", err.Error())
 			return
 		}
+	}
+
+	if mintDelay > 0 {
+		time.Sleep(mintDelay)
 	}
 
 	m.mu.Lock()

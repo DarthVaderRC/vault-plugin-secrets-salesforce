@@ -8,12 +8,18 @@ import (
 	"strings"
 
 	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/helper/locksutil"
 	"github.com/hashicorp/vault/sdk/logical"
 )
 
 // backend is the Salesforce secrets engine backend.
 type backend struct {
 	*framework.Backend
+
+	// locks is a fixed pool of per-key locks used to serialize token minting
+	// for a given role, preventing a stampede of concurrent mints on a cold or
+	// expired cache.
+	locks []*locksutil.LockEntry
 }
 
 // Factory returns a configured Salesforce secrets backend. Vault calls this when
@@ -27,7 +33,9 @@ func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend,
 }
 
 func newBackend() *backend {
-	b := &backend{}
+	b := &backend{
+		locks: locksutil.CreateLocks(),
+	}
 	b.Backend = &framework.Backend{
 		Help:        strings.TrimSpace(backendHelp),
 		BackendType: logical.TypeLogical,
