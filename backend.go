@@ -44,6 +44,7 @@ func newBackend() *backend {
 			pathConfig(b),
 			pathRoles(b),
 			pathCreds(b),
+			pathRotate(b),
 		),
 		Secrets: []*framework.Secret{
 			secretAccessToken(b),

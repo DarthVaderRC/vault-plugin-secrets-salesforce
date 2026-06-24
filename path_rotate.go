@@ -1,0 +1,75 @@
+package salesforce
+
+import (
+	"context"
+	"time"
+
+	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/helper/locksutil"
+	"github.com/hashicorp/vault/sdk/logical"
+)
+
+func pathRotate(b *backend) []*framework.Path {
+	return []*framework.Path{
+		{
+			Pattern: "roles/" + framework.GenericNameRegex("name") + "/rotate",
+			Fields: map[string]*framework.FieldSchema{
+				"name": {
+					Type:        framework.TypeString,
+					Description: "Name of the role whose cached token to rotate.",
+					Required:    true,
+				},
+			},
+			Operations: map[logical.Operation]framework.OperationHandler{
+				logical.UpdateOperation: &framework.PathOperation{Callback: b.pathRotate},
+			},
+			HelpSynopsis: "Force a fresh Salesforce access token for a role.",
+			HelpDescription: `
+Discards the role's cached token and mints a new one immediately. Subsequent
+reads of creds/<name> serve the new token. Note: previously issued tokens for
+this role remain valid at Salesforce until they expire (the token is shared
+per role; the engine does not call Salesforce's /revoke).
+`,
+		},
+	}
+}
+
+func (b *backend) pathRotate(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+	roleName := data.Get("name").(string)
+
+	role, err := b.getRole(ctx, req.Storage, roleName)
+	if err != nil {
+		return nil, err
+	}
+	if role == nil {
+		return logical.ErrorResponse("role %q does not exist", roleName), nil
+	}
+
+	cfg, err := b.getConfig(ctx, req.Storage, role.Config)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return logical.ErrorResponse("config %q for role %q does not exist", role.Config, roleName), nil
+	}
+
+	lock := locksutil.LockForKey(b.locks, roleName)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if err := b.deleteCachedToken(ctx, req.Storage, roleName); err != nil {
+		return nil, err
+	}
+	ct, err := b.mintAndCache(ctx, req.Storage, roleName, cfg, role)
+	if err != nil {
+		return nil, err
+	}
+
+	return &logical.Response{
+		Data: map[string]interface{}{
+			"rotated":    true,
+			"role":       roleName,
+			"expires_at": ct.ExpiresAt.UTC().Format(time.RFC3339),
+		},
+	}, nil
+}

@@ -110,25 +110,35 @@ func (b *backend) issueToken(ctx context.Context, s logical.Storage, roleName st
 		return ct, true, nil
 	}
 
-	now := time.Now()
-	res, err := b.mintToken(ctx, cfg, role)
+	ct, err := b.mintAndCache(ctx, s, roleName, cfg, role)
 	if err != nil {
 		return nil, false, err
 	}
+	return ct, false, nil
+}
 
-	expiresAt := computeExpiry(now, role, res)
+// mintAndCache mints a fresh token via the role's grant flow and stores it in
+// the per-role cache, replacing any existing entry. Callers that need
+// stampede protection must hold the per-role lock (LockForKey).
+func (b *backend) mintAndCache(ctx context.Context, s logical.Storage, roleName string, cfg *salesforceConfig, role *salesforceRole) (*cachedToken, error) {
+	now := time.Now()
+	res, err := b.mintToken(ctx, cfg, role)
+	if err != nil {
+		return nil, err
+	}
+
 	ct := &cachedToken{
 		AccessToken: res.AccessToken,
 		InstanceURL: res.InstanceURL,
 		TokenType:   res.TokenType,
 		Scope:       res.Scope,
 		IssuedAt:    now,
-		ExpiresAt:   expiresAt,
+		ExpiresAt:   computeExpiry(now, role, res),
 	}
 	if err := b.putCachedToken(ctx, s, roleName, ct); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	return ct, false, nil
+	return ct, nil
 }
 
 // mintToken dispatches to the correct grant flow.
