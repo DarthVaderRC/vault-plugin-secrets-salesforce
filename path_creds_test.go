@@ -247,3 +247,59 @@ func TestCreds_ErrorsWhenMintFailsAndNoValidCache(t *testing.T) {
 		t.Fatalf("expected an error when minting fails with no cache, got resp=%v err=%v", resp, err)
 	}
 }
+
+// TestRenew_ExtendsLeaseWithRoleTTLs verifies the lease renew handler returns
+// the role's configured TTL/MaxTTL so Vault can extend the lease.
+func TestRenew_ExtendsLeaseWithRoleTTLs(t *testing.T) {
+	m := sftest.New()
+	defer m.Close()
+	b, storage := testBackend(t)
+	ctx := context.Background()
+
+	if _, err := b.HandleRequest(ctx, &logical.Request{
+		Operation: logical.CreateOperation, Path: "config/acme", Storage: storage,
+		Data: map[string]interface{}{
+			"login_url": m.URL(), "token_url": m.TokenURL(),
+			"client_id": "cid", "client_secret": "secret",
+		},
+	}); err != nil {
+		t.Fatalf("config write failed: %v", err)
+	}
+	if resp, err := b.HandleRequest(ctx, &logical.Request{
+		Operation: logical.CreateOperation, Path: "roles/cc", Storage: storage,
+		Data: map[string]interface{}{
+			"config": "acme", "grant_type": "client_credentials", "scopes": "api",
+			"token_ttl": "15m", "ttl": "10m", "max_ttl": "1h",
+		},
+	}); err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("role write failed: err=%v resp=%v", err, resp)
+	}
+
+	issued := readCreds(t, b, storage)
+	if issued.Secret == nil {
+		t.Fatal("expected a lease secret")
+	}
+
+	resp, err := b.HandleRequest(ctx, &logical.Request{
+		Operation: logical.RenewOperation,
+		Path:      "creds/cc",
+		Storage:   storage,
+		Secret:    issued.Secret,
+	})
+	if err != nil {
+		t.Fatalf("renew failed: %v", err)
+	}
+	if resp == nil || resp.Secret == nil {
+		t.Fatalf("renew returned no secret: %v", resp)
+	}
+	if resp.Secret.TTL != 10*time.Minute {
+		t.Errorf("renew lease TTL = %v, want 10m (role ttl)", resp.Secret.TTL)
+	}
+	if resp.Secret.MaxTTL != time.Hour {
+		t.Errorf("renew lease MaxTTL = %v, want 1h (role max_ttl)", resp.Secret.MaxTTL)
+	}
+	// Renew must not mint a new token.
+	if m.MintCount() != 1 {
+		t.Errorf("renew should not mint, MintCount=%d", m.MintCount())
+	}
+}
