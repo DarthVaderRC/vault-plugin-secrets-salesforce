@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DarthVaderRC.
+// SPDX-License-Identifier: MPL-2.0
+
 package salesforce
 
 import (
@@ -7,8 +10,8 @@ import (
 	"github.com/hashicorp/vault/sdk/logical"
 )
 
-// seedConfig writes a config with the given secret material for role tests.
-func seedConfig(t *testing.T, b *backend, storage logical.Storage, name string, data map[string]interface{}) {
+// seedConfig writes a config named "acme" with the given secret material for role tests.
+func seedConfig(t *testing.T, b *backend, storage logical.Storage, data map[string]interface{}) {
 	t.Helper()
 	base := map[string]interface{}{
 		"login_url": "https://acme.my.salesforce.com",
@@ -18,7 +21,7 @@ func seedConfig(t *testing.T, b *backend, storage logical.Storage, name string, 
 		base[k] = v
 	}
 	if _, err := b.HandleRequest(context.Background(), &logical.Request{
-		Operation: logical.CreateOperation, Path: "config/" + name, Storage: storage, Data: base,
+		Operation: logical.CreateOperation, Path: "config/acme", Storage: storage, Data: base,
 	}); err != nil {
 		t.Fatalf("seedConfig failed: %v", err)
 	}
@@ -33,7 +36,7 @@ func writeRole(t *testing.T, b *backend, storage logical.Storage, name string, d
 
 func TestRole_JWTBearer_Valid(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"private_key": "PEMKEY"})
+	seedConfig(t, b, storage, map[string]interface{}{"private_key": "PEMKEY"})
 
 	resp, err := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "jwt_bearer", "username": "u@acme.com", "scopes": "api",
@@ -61,7 +64,7 @@ func TestRole_JWTBearer_Valid(t *testing.T) {
 
 func TestRole_JWTBearer_RequiresUsername(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"private_key": "PEMKEY"})
+	seedConfig(t, b, storage, map[string]interface{}{"private_key": "PEMKEY"})
 
 	resp, _ := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "jwt_bearer",
@@ -73,7 +76,7 @@ func TestRole_JWTBearer_RequiresUsername(t *testing.T) {
 
 func TestRole_JWTBearer_RequiresPrivateKey(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", nil) // no private_key
+	seedConfig(t, b, storage, nil) // no private_key
 
 	resp, _ := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "jwt_bearer", "username": "u@acme.com",
@@ -85,7 +88,7 @@ func TestRole_JWTBearer_RequiresPrivateKey(t *testing.T) {
 
 func TestRole_ClientCredentials_RequiresClientSecret(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", nil) // no client_secret
+	seedConfig(t, b, storage, nil) // no client_secret
 
 	resp, _ := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "client_credentials",
@@ -97,7 +100,7 @@ func TestRole_ClientCredentials_RequiresClientSecret(t *testing.T) {
 
 func TestRole_ClientCredentials_Valid(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"client_secret": "shh"})
+	seedConfig(t, b, storage, map[string]interface{}{"client_secret": "shh"})
 
 	resp, err := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "client_credentials", "scopes": "api",
@@ -109,7 +112,7 @@ func TestRole_ClientCredentials_Valid(t *testing.T) {
 
 func TestRole_RejectsUnknownGrant(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"client_secret": "shh"})
+	seedConfig(t, b, storage, map[string]interface{}{"client_secret": "shh"})
 
 	resp, _ := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "password",
@@ -132,7 +135,7 @@ func TestRole_RejectsMissingConfig(t *testing.T) {
 
 func TestRole_RejectsJWTExpiryTooLong(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"private_key": "PEMKEY"})
+	seedConfig(t, b, storage, map[string]interface{}{"private_key": "PEMKEY"})
 
 	resp, _ := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "jwt_bearer", "username": "u@acme.com", "jwt_expiry": "10m",
@@ -144,7 +147,7 @@ func TestRole_RejectsJWTExpiryTooLong(t *testing.T) {
 
 func TestRole_RejectsTTLOverMax(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"client_secret": "shh"})
+	seedConfig(t, b, storage, map[string]interface{}{"client_secret": "shh"})
 
 	resp, _ := writeRole(t, b, storage, "svc", map[string]interface{}{
 		"config": "acme", "grant_type": "client_credentials", "ttl": "2h", "max_ttl": "1h",
@@ -156,7 +159,7 @@ func TestRole_RejectsTTLOverMax(t *testing.T) {
 
 func TestRole_ListAndDelete(t *testing.T) {
 	b, storage := testBackend(t)
-	seedConfig(t, b, storage, "acme", map[string]interface{}{"client_secret": "shh"})
+	seedConfig(t, b, storage, map[string]interface{}{"client_secret": "shh"})
 
 	for _, n := range []string{"a", "b"} {
 		if resp, err := writeRole(t, b, storage, n, map[string]interface{}{

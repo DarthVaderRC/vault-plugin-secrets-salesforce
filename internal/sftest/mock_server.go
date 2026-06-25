@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DarthVaderRC.
+// SPDX-License-Identifier: MPL-2.0
+
 // Package sftest provides a mock Salesforce OAuth token endpoint for tests.
 package sftest
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DarthVaderRC.
+// SPDX-License-Identifier: MPL-2.0
+
 // Package salesforce implements a HashiCorp Vault secrets engine that brokers
 // Salesforce OAuth 2.0 access tokens using the JWT Bearer and Client Credentials
 // grant flows.

@@ -32,6 +32,11 @@ jobs:
             echo "These files need gofmt:"; echo "$unformatted"; exit 1
           fi
 
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
       - name: Unit tests (race + coverage)
         run: go test -race -coverprofile=coverage.out ./...
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DarthVaderRC.
+// SPDX-License-Identifier: MPL-2.0
+
 package salesforce
 
 import (
@@ -59,7 +62,7 @@ func httpClientFor(cfg *salesforceConfig) (*http.Client, error) {
 }
 
 // requestClientCredentialsToken performs the client_credentials grant.
-func requestClientCredentialsToken(ctx context.Context, cfg *salesforceConfig, role *salesforceRole) (*tokenResult, error) {
+func requestClientCredentialsToken(ctx context.Context, cfg *salesforceConfig, _ *salesforceRole) (*tokenResult, error) {
 	// Salesforce's Client Credentials flow does NOT accept a "scope" request
 	// parameter — sending one fails with `invalid_request: scope parameter not
 	// supported`. The granted scopes are fixed by the Connected App's OAuth
@@ -144,7 +147,7 @@ func doTokenRequestOnce(ctx context.Context, client *http.Client, cfg *salesforc
 		}
 		return nil, true, fmt.Errorf("token request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {

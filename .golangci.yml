@@ -1,0 +1,8 @@
+version: "2"
+
+# Lint configuration for vault-plugin-secrets-salesforce.
+# Enables the default linter set plus `unparam` to catch unused function
+# parameters and dead code that the default linters otherwise miss.
+linters:
+  enable:
+    - unparam

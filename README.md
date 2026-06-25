@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/ci.yml/badge.svg)](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/ci.yml)
 [![Release](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/release.yml/badge.svg)](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/release.yml)
+[![Docker](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/pkgs/container/vault-plugin-secrets-salesforce)
 [![Go Version](https://img.shields.io/badge/go-1.25.7-blue?logo=go)](go.mod)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](LICENSE)
 
@@ -22,6 +23,7 @@ caches one token per role, and manages their lifecycle as Vault leases.
 - [Features](#features)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
+- [Run as a container](#run-as-a-container)
 - [Configure](#configure)
 - [Configuration reference](#configuration-reference)
 - [Operations](#operations)
@@ -131,6 +133,26 @@ vault secrets enable -path=salesforce vault-plugin-secrets-salesforce
 
 For the lab sandbox, `scripts/deploy-sandbox.sh` builds, registers, and
 enables/reloads the plugin in one step (see `docs/E2E-RUNBOOK.md`).
+
+## Run as a container
+
+Multi-arch container images (`linux/amd64`, `linux/arm64`) are published to GitHub
+Container Registry on each release:
+
+```bash
+docker pull ghcr.io/darthvaderrc/vault-plugin-secrets-salesforce:latest
+```
+
+The image bundles the plugin binary on `alpine` with CA certificates. You can use
+it with Vault's [container plugin runtime](https://developer.hashicorp.com/vault/docs/plugins/containerized-plugins)
+(Vault 1.16+, Linux), or extract the binary for a conventional install:
+
+```bash
+# Copy the binary out of the image into the current directory.
+id=$(docker create ghcr.io/darthvaderrc/vault-plugin-secrets-salesforce:latest)
+docker cp "$id":/bin/vault-plugin-secrets-salesforce ./vault-plugin-secrets-salesforce
+docker rm "$id"
+```
 
 ## Configure
 

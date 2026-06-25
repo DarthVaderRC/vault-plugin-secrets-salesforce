@@ -1,0 +1,16 @@
+# VCS and CI
+.git
+.github
+
+# Build outputs / local binaries (the image builds the binary itself)
+dist
+coverage.out
+
+# Local secrets (never copy into an image)
+.secrets
+
+# Docs and license (not needed for the Go build)
+*.md
+LICENSE
+content
+docs

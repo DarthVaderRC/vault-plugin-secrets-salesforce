@@ -1,3 +1,6 @@
+// Copyright (c) 2026 DarthVaderRC.
+// SPDX-License-Identifier: MPL-2.0
+
 package sftest
 
 import (
@@ -13,7 +16,7 @@ func postForm(tokenURL string, values url.Values) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	return string(body), err
 }
