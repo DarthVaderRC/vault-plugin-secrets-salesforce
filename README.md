@@ -178,6 +178,25 @@ vault lease revoke "$LEASE"   # clears the cached token; next read re-mints
 
 ## Documentation
 
+A complete, published-quality documentation set (HashiCorp docs-site MDX,
+laid out to mirror the Vault docs repo) lives under
+[`content/vault/`](content/vault/). It covers what the engine is, how it was
+designed, production hardening, configuration, the HTTP API, and an end-to-end
+tutorial for each flow.
+
+| Doc | Purpose |
+|---|---|
+| [Overview](content/vault/v1.20.x/docs/secrets/salesforce/index.mdx) | What it is, why, features, architecture. |
+| [How it works](content/vault/v1.20.x/docs/secrets/salesforce/concepts.mdx) | Design: data model, flows, caching, leasing, concurrency. |
+| [Setup and configuration](content/vault/v1.20.x/docs/secrets/salesforce/setup.mdx) | Build, enable, configure; field reference. |
+| [Production hardening](content/vault/v1.20.x/docs/secrets/salesforce/hardening.mdx) | Resilience and security controls. |
+| [Considerations and limitations](content/vault/v1.20.x/docs/secrets/salesforce/considerations.mdx) | Salesforce limits, shared-token model, constraints. |
+| [Client Credentials tutorial](content/vault/v1.20.x/docs/secrets/salesforce/client-credentials.mdx) | End-to-end CC walkthrough. |
+| [JWT Bearer tutorial](content/vault/v1.20.x/docs/secrets/salesforce/jwt-bearer.mdx) | End-to-end JWT walkthrough. |
+| [HTTP API](content/vault/v1.20.x/api-docs/secret/salesforce/index.mdx) | Endpoint reference. |
+
+### Engineering references
+
 | Doc | Purpose |
 |---|---|
 | [docs/SALESFORCE-SETUP.md](docs/SALESFORCE-SETUP.md) | Connected App setup (screenshots, gotchas). |

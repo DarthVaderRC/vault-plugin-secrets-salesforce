@@ -1,0 +1,35 @@
+[
+  {
+    "title": "Salesforce",
+    "routes": [
+      {
+        "title": "Overview",
+        "path": "secrets/salesforce"
+      },
+      {
+        "title": "How it works",
+        "path": "secrets/salesforce/concepts"
+      },
+      {
+        "title": "Setup and configuration",
+        "path": "secrets/salesforce/setup"
+      },
+      {
+        "title": "Production hardening",
+        "path": "secrets/salesforce/hardening"
+      },
+      {
+        "title": "Considerations and limitations",
+        "path": "secrets/salesforce/considerations"
+      },
+      {
+        "title": "Tutorial: Client Credentials flow",
+        "path": "secrets/salesforce/client-credentials"
+      },
+      {
+        "title": "Tutorial: JWT Bearer flow",
+        "path": "secrets/salesforce/jwt-bearer"
+      }
+    ]
+  }
+]
