@@ -1,13 +1,34 @@
 # vault-plugin-secrets-salesforce
 
+[![CI](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/ci.yml/badge.svg)](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/ci.yml)
+[![Release](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/release.yml/badge.svg)](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/actions/workflows/release.yml)
+[![Go Version](https://img.shields.io/badge/go-1.25.7-blue?logo=go)](go.mod)
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](LICENSE)
+
 A HashiCorp Vault secrets engine that brokers **Salesforce OAuth 2.0 access
 tokens** via the **JWT Bearer** and **Client Credentials** grant flows. Vault
 holds the Connected App secrets, mints short-lived access tokens on demand,
 caches one token per role, and manages their lifecycle as Vault leases.
 
-> Status: **Stage 2 (production hardening) in progress.** Both flows are
-> validated end-to-end through Vault against a real Salesforce org. See
-> [Roadmap](#roadmap).
+> [!IMPORTANT]
+> This is a community plugin. It is not built into Vault and is not officially
+> supported by HashiCorp. Use at your own risk and test thoroughly before
+> deploying to production. Both flows are validated end-to-end through Vault
+> against a real Salesforce org. See the [Roadmap](#roadmap).
+
+## Table of contents
+
+- [Why](#why)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Configure](#configure)
+- [Configuration reference](#configuration-reference)
+- [Operations](#operations)
+- [Security](#security)
+- [Documentation](#documentation)
+- [Roadmap](#roadmap)
+- [License](#license)
 
 ## Why
 
@@ -50,7 +71,41 @@ config/<name>     roles/<name>            creds/<name>  (read)
 - **creds/** (and alias **token/**) issues a leased access token for a role.
 - **roles/\<name\>/rotate** discards the cached token and mints a fresh one.
 
-## Build
+## Quick start
+
+Install the plugin one of two ways — download a prebuilt release binary, or build
+from source — then register and enable it.
+
+### Option A: Download a prebuilt release
+
+Prebuilt binaries for `linux` and `darwin` (`amd64` / `arm64`) are published on
+the [latest release page](https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/releases/latest)
+as `.tar.gz` archives, each with an entry in `SHA256SUMS`.
+
+```bash
+# Replace VERSION (e.g. v0.1.0) and pick your platform (linux_arm64, linux_amd64,
+# darwin_arm64, darwin_amd64).
+VERSION=v0.1.0
+PLATFORM=linux_arm64
+BASE=https://github.com/DarthVaderRC/vault-plugin-secrets-salesforce/releases/download/${VERSION}
+
+mkdir -p ./bin
+curl -fsSL -o ./bin/plugin.tar.gz \
+  "${BASE}/vault-plugin-secrets-salesforce_${VERSION}_${PLATFORM}.tar.gz"
+
+# (Optional) verify the checksum.
+curl -fsSL "${BASE}/SHA256SUMS" | grep "${VERSION}_${PLATFORM}.tar.gz" \
+  | sed "s#vault-plugin-secrets-salesforce#./bin/plugin#" | shasum -a 256 -c -
+
+# Extract the binary (the archive contains a plain `vault-plugin-secrets-salesforce`).
+tar -xzf ./bin/plugin.tar.gz -C ./bin && rm ./bin/plugin.tar.gz
+chmod +x ./bin/vault-plugin-secrets-salesforce
+```
+
+A Vault plugin is a native binary for one GOOS/GOARCH; pick the archive that
+matches the platform of the Vault server that will run it.
+
+### Option B: Build from source
 
 ```bash
 make build           # host platform -> dist/vault-plugin-secrets-salesforce
@@ -58,12 +113,10 @@ make build-linux     # linux/arm64 (the lab container) -> dist/...
 make test            # unit tests (-race)
 make testacc         # acceptance tests (VAULT_ACC=1)
 make cover           # coverage report
+make release         # cross-compile all platforms -> dist/*.tar.gz + SHA256SUMS
 ```
 
-A Vault plugin is a native binary for one GOOS/GOARCH; build for the platform of
-the Vault server that will run it.
-
-## Install (self-hosted Vault)
+### Register and enable
 
 ```bash
 # 1. Place the binary in Vault's plugin_directory and register it.
@@ -211,8 +264,9 @@ tutorial for each flow.
 - [x] Lifecycle hardening — mint lock, rotate, retry/backoff, graceful degradation.
 - [x] Comprehensive tests + acceptance suite.
 - [x] Security hardening — host allowlist, secret-leak tests, ACL examples.
-- [ ] CI + multi-arch release.
+- [x] CI + multi-arch release.
 
 ## License
 
-See repository license.
+This project is licensed under the Mozilla Public License 2.0. See the
+[LICENSE](LICENSE) file for details.

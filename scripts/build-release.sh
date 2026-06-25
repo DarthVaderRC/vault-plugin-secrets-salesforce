@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cross-compile vault-plugin-secrets-salesforce for the supported platforms and
-# emit per-arch binaries plus a SHA256SUMS file under dist/.
+# emit per-platform .tar.gz archives plus a SHA256SUMS file under dist/.
 #
 # Usage: scripts/build-release.sh [version]
 #   version: optional tag embedded in artifact names (default: dev)
@@ -27,13 +27,16 @@ echo "==> Building ${PLUGIN_NAME} ${VERSION}"
 for platform in "${PLATFORMS[@]}"; do
   GOOS="${platform%/*}"
   GOARCH="${platform#*/}"
-  bin="${PLUGIN_NAME}_${VERSION}_${GOOS}_${GOARCH}"
   echo "    - ${GOOS}/${GOARCH}"
   GOOS="${GOOS}" GOARCH="${GOARCH}" CGO_ENABLED=0 \
-    go build -trimpath -ldflags="-s -w" -o "${OUT}/${bin}" "${PKG}"
+    go build -trimpath -ldflags="-s -w" -o "${OUT}/${PLUGIN_NAME}" "${PKG}"
+  # Archive the binary under its plain name so it extracts to
+  # ./${PLUGIN_NAME}, ready to register with Vault.
+  archive="${PLUGIN_NAME}_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
+  ( cd "${OUT}" && tar czf "${archive}" "${PLUGIN_NAME}" && rm -f "${PLUGIN_NAME}" )
 done
 
 echo "==> Generating SHA256SUMS"
-( cd "${OUT}" && shasum -a 256 ${PLUGIN_NAME}_* > SHA256SUMS )
+( cd "${OUT}" && shasum -a 256 ${PLUGIN_NAME}_*.tar.gz > SHA256SUMS )
 cat "${OUT}/SHA256SUMS"
 echo "==> Done. Artifacts in ${OUT}/"
