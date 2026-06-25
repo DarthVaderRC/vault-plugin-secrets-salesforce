@@ -1,7 +1,8 @@
 dist/
 *.key
 *.pem
-vault-plugin-secrets-salesforce
+# Built plugin binary at the repo root only (do NOT ignore the cmd/ source dir).
+/vault-plugin-secrets-salesforce
 .env
 
 # Local secrets (JWT keypair for Salesforce e2e)

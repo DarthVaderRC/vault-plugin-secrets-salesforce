@@ -15,9 +15,9 @@ using the `vault-lab-sandbox` Vault Enterprise container. Complete
 ## 0. Environment
 
 ```bash
-export PATH="/Users/dineshgawande/Documents/code/binaries:$PATH"
+export PATH="$HOME/vault-binaries:$PATH"
 export VAULT_ADDR=http://127.0.0.1:8200
-INIT=/Users/dineshgawande/Documents/code/vault-lab-sandbox/output/shared-vault-replication/secrets/vault-ent.init
+INIT=/path/to/vault-lab-sandbox/output/shared-vault-replication/secrets/vault-ent.init
 export VAULT_TOKEN=$(grep 'Initial Root Token:' "$INIT" | awk '{print $4}')
 ```
 

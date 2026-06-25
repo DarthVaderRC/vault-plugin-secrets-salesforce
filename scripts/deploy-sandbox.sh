@@ -12,7 +12,7 @@ set -euo pipefail
 
 PLUGIN_NAME="vault-plugin-secrets-salesforce"
 MOUNT_PATH="${MOUNT_PATH:-salesforce}"
-SANDBOX_PLUGIN_DIR="${SANDBOX_PLUGIN_DIR:-/Users/dineshgawande/Documents/code/vault-lab-sandbox/output/shared-vault-replication/runtime/vault-ent-plugins}"
+SANDBOX_PLUGIN_DIR="${SANDBOX_PLUGIN_DIR:-/path/to/vault-lab-sandbox/output/shared-vault-replication/runtime/vault-ent-plugins}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "==> Building ${PLUGIN_NAME} for linux/arm64"

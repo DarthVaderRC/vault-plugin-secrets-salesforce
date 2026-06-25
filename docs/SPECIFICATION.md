@@ -543,7 +543,7 @@ must be built for the **container's** OS/arch (`linux/amd64` or `linux/arm64`), 
 ### 9.2 Build the plugin
 
 ```bash
-cd /Users/dineshgawande/Documents/code/sfdc
+cd /path/to/sfdc
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
   go build -o dist/vault-plugin-secrets-salesforce ./cmd/vault-plugin-secrets-salesforce
 cp dist/vault-plugin-secrets-salesforce \
