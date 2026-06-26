@@ -3,7 +3,7 @@
 This guide configures a Salesforce org so `vault-plugin-secrets-salesforce` can
 mint access tokens via the **JWT Bearer** and **Client Credentials** flows.
 
-You only need the flow(s) you intend to use — both can share one Connected App.
+You only need the flow(s) you intend to use: both can share one Connected App.
 
 > Use a **Developer Edition** org (free) or a sandbox. Both flows require
 > **My Domain** (Developer Edition has it on by default).
@@ -80,7 +80,7 @@ Check **Enable OAuth Settings**, then:
 Click **Save**. Salesforce shows a confirmation page (it can take 2–10 minutes to
 propagate); click **Continue**.
 
-> ⚠️ **Gotcha — the certificate file input clears if the form reloads.** If the
+> ⚠️ **Gotcha: the certificate file input clears if the form reloads.** If the
 > page re-renders for any reason (a validation error, navigating back), the
 > uploaded cert is silently dropped. After saving, **re-open the app and confirm
 > the Digital Certificate shows your `CN=...`** before testing JWT. A wrong/missing
@@ -111,7 +111,7 @@ App detail → **Manage** → **Edit Policies**.
 
 ![Policies ready for run-as](images/connected-app/06-policies-ready-for-runas.png)
 
-> ⚠️ **The Run As field is a lookup** — you must pick the user via the magnifying-
+> ⚠️ **The Run As field is a lookup**: you must pick the user via the magnifying-
 > glass popup. Typing the name (or injecting an Id) is rejected with
 > `Invalid Data / Invalid User`.
 
@@ -215,7 +215,7 @@ Then proceed to `docs/E2E-RUNBOOK.md` to drive the same flows through Vault.
 | Symptom | Cause / fix |
 |---|---|
 | `invalid_client: invalid client credentials` (JWT) | Cert on the app doesn't match `sf_jwt.key` (often the upload was dropped on a form reload). Re-upload `sf_jwt.crt`; verify moduli match. |
-| `invalid_grant: user hasn't approved this consumer` (JWT) | Integration user not pre-authorized — assign the profile/permission set (step 4). |
-| `invalid_app_access: user is not admin approved...` (Client Credentials) | Same as above — run-as user needs the profile/permission set. |
+| `invalid_grant: user hasn't approved this consumer` (JWT) | Integration user not pre-authorized: assign the profile/permission set (step 4). |
+| `invalid_app_access: user is not admin approved...` (Client Credentials) | Same as above: run-as user needs the profile/permission set. |
 | `Invalid Data / Invalid User` when saving policies | Run As must be chosen via the lookup popup, not typed. |
 | Token request returns nothing for 2–10 min after creating the app | Normal propagation delay; retry. |

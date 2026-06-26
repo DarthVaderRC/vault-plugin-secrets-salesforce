@@ -3,7 +3,7 @@
 Example Vault policies for the Salesforce secrets engine mounted at `salesforce/`.
 Adjust the mount path to match your environment.
 
-## 1. Application / workload — read tokens only
+## 1. Application / workload: read tokens only
 
 Most consumers only need to read tokens for the role(s) they own. They must not
 see or change configs (which hold secrets) or roles.
@@ -24,7 +24,7 @@ path "salesforce/token/sales-sync" {
 Grant per role; avoid wildcarding `salesforce/creds/*` unless a workload legitimately
 needs every role.
 
-## 2. Operator — manage roles, rotate, but not connection secrets
+## 2. Operator: manage roles, rotate, but not connection secrets
 
 Lets a platform/operator define roles and force rotation without granting the
 ability to read back secret material (configs are write-only/redacted anyway).
@@ -46,7 +46,7 @@ path "salesforce/creds/*" {
 }
 ```
 
-## 3. Admin — manage connection configs (secret material)
+## 3. Admin: manage connection configs (secret material)
 
 Only trusted admins should write `config/*`, which accepts the Consumer Secret
 and JWT private key. These are write-only and redacted on read.
@@ -62,7 +62,7 @@ path "salesforce/roles/*" {
 }
 ```
 
-## 4. Rotation automation — rotate only
+## 4. Rotation automation: rotate only
 
 A narrowly-scoped policy for a scheduled job that periodically forces fresh
 tokens, with no other access.

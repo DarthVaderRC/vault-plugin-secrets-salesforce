@@ -6,7 +6,7 @@ Only the latest released version is supported with security updates.
 
 ## Reporting a vulnerability
 
-Please report security vulnerabilities **privately** — do not open a public
+Please report security vulnerabilities **privately**: do not open a public
 issue for an undisclosed vulnerability.
 
 Use GitHub's private vulnerability reporting:

@@ -4,7 +4,7 @@ A custom HashiCorp Vault secrets engine for managing Salesforce OAuth 2.0 access
 
 | | |
 |---|---|
-| **Status** | Draft (v1) — pending implementation |
+| **Status** | Draft (v1): pending implementation |
 | **Plugin name** | `vault-plugin-secrets-salesforce` |
 | **Plugin type** | Secrets engine (external plugin) |
 | **Language** | Go (`github.com/hashicorp/vault/sdk`) |
@@ -20,8 +20,8 @@ A custom HashiCorp Vault secrets engine for managing Salesforce OAuth 2.0 access
 
 Most enterprise Salesforce integrations are server-to-server: a backend service calls the
 Salesforce REST/Bulk/SOAP APIs and must present a short-lived OAuth 2.0 **access token**.
-Today each integrating application typically holds the long-lived secret material itself —
-the RSA private key (JWT Bearer flow) or the consumer secret (Client Credentials flow) —
+Today each integrating application typically holds the long-lived secret material itself:
+the RSA private key (JWT Bearer flow) or the consumer secret (Client Credentials flow):
 and implements its own token-minting and caching logic. This spreads high-value secrets
 across many services, produces inconsistent token handling, and provides no central
 audit, rotation, or revocation point.
@@ -46,7 +46,7 @@ engine manages Salesforce OAuth tokens**. This engine fills that gap.
 - Device, SAML Bearer, or Asset Token flows.
 - Managing Connected App / External Client App definitions inside Salesforce (the engine
   consumes an already-configured app; it does not create one).
-- Acting as an OAuth **authorization server** — the engine is strictly a client/broker.
+- Acting as an OAuth **authorization server**: the engine is strictly a client/broker.
 
 ### 1.4 Target users
 
@@ -63,7 +63,7 @@ Salesforce OAuth clients are defined as either a **Connected App** (classic) or 
 **External Client App** (newer packaging model). Both expose:
 
 - A **Consumer Key** (OAuth `client_id`).
-- A **Consumer Secret** (OAuth `client_secret`) — used by Client Credentials flow.
+- A **Consumer Secret** (OAuth `client_secret`): used by Client Credentials flow.
 - OAuth scopes, and per-flow enablement toggles.
 
 For **JWT Bearer flow**, the app is configured with a digital certificate whose public key
@@ -111,7 +111,7 @@ The JWT is RS256-signed by Vault using the app's private key. Claims:
 | `aud` | Login host, e.g. `https://login.salesforce.com` (or `test`/My Domain) |
 | `exp` | Now + short window (≤ 3 min; Salesforce rejects > 5 min in the future) |
 
-No `client_secret` is sent and **no refresh token is issued** — the access token is the
+No `client_secret` is sent and **no refresh token is issued**: the access token is the
 only credential returned. Re-minting means signing a fresh JWT and calling the token
 endpoint again. This is the cleanest fit for a Vault dynamic secret.
 
@@ -132,7 +132,7 @@ Also returns no refresh token; Vault re-mints by repeating the request.
 ### 2.5 Token TTL behavior
 
 Salesforce access-token lifetime is governed by the org session settings and the
-Connected App policy ("Timeout Value"), not by an `expires_in` field — the token response
+Connected App policy ("Timeout Value"), not by an `expires_in` field: the token response
 generally does **not** include `expires_in`. The engine therefore treats token TTL as a
 **configurable role parameter** (default conservative, e.g. 15m) bounded by Vault
 `max_ttl`, optionally validated via the introspection endpoint.
@@ -172,7 +172,7 @@ its plugin RPC. It implements `logical.Backend` via `framework.Backend`, registe
                                                                   +----------------+
 ```
 
-### 3.2 Request flow — JWT Bearer
+### 3.2 Request flow: JWT Bearer
 
 ```
 caller --> GET salesforce/creds/<role>
@@ -187,7 +187,7 @@ caller --> GET salesforce/creds/<role>
     8. return {access_token, instance_url, token_type, expires_at}
 ```
 
-### 3.3 Request flow — Client Credentials
+### 3.3 Request flow: Client Credentials
 
 ```
 caller --> GET salesforce/creds/<role>
@@ -292,8 +292,8 @@ Returns config with `client_secret` and `private_key` redacted.
 }
 ```
 
-### 5.3 `LIST salesforce/config` — returns `{ "keys": ["acme-prod", ...] }`.
-### 5.4 `DELETE salesforce/config/<name>` — `204`. Fails if roles still reference it (or cascades per config flag).
+### 5.3 `LIST salesforce/config`: returns `{ "keys": ["acme-prod", ...] }`.
+### 5.4 `DELETE salesforce/config/<name>`: `204`. Fails if roles still reference it (or cascades per config flag).
 
 ### 5.5 `POST salesforce/roles/<name>`
 
@@ -329,7 +329,7 @@ vault write salesforce/roles/eca-svc \
 Validation: `jwt_bearer` requires `username` + the config's `private_key`;
 `client_credentials` requires the config's `client_secret`.
 
-### 5.6 `GET salesforce/roles/<name>` — role config, secrets redacted.
+### 5.6 `GET salesforce/roles/<name>`: role config, secrets redacted.
 ### 5.7 `LIST salesforce/roles` / `DELETE salesforce/roles/<name>`.
 
 ### 5.8 `GET salesforce/creds/<name>` (and alias `GET salesforce/token/<name>`)
@@ -363,7 +363,7 @@ Issue or return a cached access token. **This is the primary read path.**
 | 400 | `invalid_grant` | Bad assertion, user not pre-authorized, clock skew, wrong `aud`/`sub`. |
 | 400 | `invalid_client` | Wrong consumer key/secret or app not enabled for the flow. |
 | 400 | `inactive_user` / `inactive_org` | Run-as user/org disabled. |
-| 5xx | — | Salesforce unavailable. |
+| 5xx |: | Salesforce unavailable. |
 
 Vault returns these as a `400`/`502` logical error with the Salesforce `error` and
 `error_description` surfaced in the message (no secret material logged).
@@ -378,7 +378,7 @@ Invalidate the cache entry and re-mint on next read. `204`.
 
 All entries live under the mount's barrier-encrypted storage (`framework.Backend` Storage).
 
-**Config entry** — `config/<name>`:
+**Config entry**: `config/<name>`:
 
 ```json
 {
@@ -392,7 +392,7 @@ All entries live under the mount's barrier-encrypted storage (`framework.Backend
 }
 ```
 
-**Role entry** — `role/<name>`:
+**Role entry**: `role/<name>`:
 
 ```json
 {
@@ -410,7 +410,7 @@ All entries live under the mount's barrier-encrypted storage (`framework.Backend
 }
 ```
 
-**Cache entry** — `cache/<role>`:
+**Cache entry**: `cache/<role>`:
 
 ```json
 {
@@ -493,7 +493,7 @@ path "salesforce/config/*" { capabilities = ["create","read","update","delete","
 path "salesforce/roles/*"  { capabilities = ["create","read","update","delete","list"] }
 ```
 
-Callers never receive the signing key — only minted access tokens.
+Callers never receive the signing key: only minted access tokens.
 
 ### 8.3 Audit
 
@@ -675,13 +675,13 @@ a JWT library (`github.com/golang-jwt/jwt/v5`), stdlib `net/http`.
 
 | Milestone | Contents |
 |---|---|
-| M1 — Scaffold | `go.mod`, `cmd/main.go`, `backend.go`, plugin serves & mounts; empty paths. |
-| M2 — Config & roles | `path_config.go`, `path_roles.go`, storage schema, redaction, validation. |
-| M3 — Client Credentials | `client.go` token call, `path_creds.go`, cache, lease secret type. |
-| M4 — JWT Bearer | `jwt.go` assertion signing, JWT flow in client + creds path. |
-| M5 — Lifecycle polish | renew/revoke funcs, `renew_skew`, optional introspection, rotate path. |
-| M6 — Tests | unit + mock SF server + acceptance tests; CI build for linux. |
-| M7 — Sandbox deploy | HCL/plugin-dir change, build linux binary, register/enable, e2e runbook. |
+| M1: Scaffold | `go.mod`, `cmd/main.go`, `backend.go`, plugin serves & mounts; empty paths. |
+| M2: Config & roles | `path_config.go`, `path_roles.go`, storage schema, redaction, validation. |
+| M3: Client Credentials | `client.go` token call, `path_creds.go`, cache, lease secret type. |
+| M4: JWT Bearer | `jwt.go` assertion signing, JWT flow in client + creds path. |
+| M5: Lifecycle polish | renew/revoke funcs, `renew_skew`, optional introspection, rotate path. |
+| M6: Tests | unit + mock SF server + acceptance tests; CI build for linux. |
+| M7: Sandbox deploy | HCL/plugin-dir change, build linux binary, register/enable, e2e runbook. |
 
 (Ordering puts Client Credentials before JWT because it is simpler to validate end-to-end;
 both ship in v1.)
@@ -690,16 +690,16 @@ both ship in v1.)
 
 ## 13. Open questions & future work
 
-- **Refresh-token / web-server flow** — store a refresh token as a static secret and vend
+- **Refresh-token / web-server flow**: store a refresh token as a static secret and vend
   short-lived access tokens; needs a callback/bootstrap path.
-- **Username-Password flow** — deprecated by Salesforce; likely never.
-- **Revocation semantics** — should Salesforce-side `/revoke` ever be the default given
+- **Username-Password flow**: deprecated by Salesforce; likely never.
+- **Revocation semantics**: should Salesforce-side `/revoke` ever be the default given
   tokens are shared per role? Currently opt-in.
-- **Per-request `sub` override** — allow JWT Bearer to impersonate different users at read
+- **Per-request `sub` override**: allow JWT Bearer to impersonate different users at read
   time (subject to ACL) rather than fixing `username` on the role.
-- **Multiple instances / org failover** — config-level support for multiple `login_url`s.
-- **Signing-key rotation** — coordinate Connected App cert rotation with config updates.
-- **WIF / external key storage** — sign JWT via Vault Transit or an HSM instead of an
+- **Multiple instances / org failover**: config-level support for multiple `login_url`s.
+- **Signing-key rotation**: coordinate Connected App cert rotation with config updates.
+- **WIF / external key storage**: sign JWT via Vault Transit or an HSM instead of an
   in-barrier private key.
-- **Open-sourcing** — align repo layout/CI with HashiCorp `vault-plugin-secrets-*`
+- **Open-sourcing**: align repo layout/CI with HashiCorp `vault-plugin-secrets-*`
   conventions for potential community release.

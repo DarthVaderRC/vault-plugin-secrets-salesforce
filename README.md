@@ -44,16 +44,16 @@ are centrally controlled.
 
 - **Two server-to-server flows:** JWT Bearer (RS256 assertion) and Client
   Credentials.
-- **Per-role token cache** in the Vault barrier — one token per role, re-minted
+- **Per-role token cache** in the Vault barrier: one token per role, re-minted
   near expiry (`renew_skew`), so a burst of reads doesn't churn tokens.
-- **Anti-stampede mint lock** — concurrent reads on a cold cache trigger exactly
+- **Anti-stampede mint lock**: concurrent reads on a cold cache trigger exactly
   one token request.
-- **Lease lifecycle** — issued tokens are Vault leases (renew / revoke).
-- **`rotate`** — force a fresh token on demand.
-- **Resilience** — transient failures (network / 429 / 5xx) retried with
+- **Lease lifecycle**: issued tokens are Vault leases (renew / revoke).
+- **`rotate`**: force a fresh token on demand.
+- **Resilience**: transient failures (network / 429 / 5xx) retried with
   exponential backoff + jitter; a still-valid cached token is served if a
   re-mint briefly fails.
-- **Security** — secrets are write-only and redacted on read; a token-endpoint
+- **Security**: secrets are write-only and redacted on read; a token-endpoint
   host allowlist (`*.salesforce.com` / `*.force.com`) prevents leaking secrets
   to the wrong host; TLS verification on by default with optional `ca_cert`.
 
@@ -75,8 +75,8 @@ config/<name>     roles/<name>            creds/<name>  (read)
 
 ## Quick start
 
-Install the plugin one of two ways — download a prebuilt release binary, or build
-from source — then register and enable it.
+Install the plugin one of two ways: download a prebuilt release binary, or build
+from source: then register and enable it.
 
 ### Option A: Download a prebuilt release
 
@@ -221,7 +221,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 | `config` | yes | The `config/<name>` this role uses. |
 | `grant_type` | yes | `jwt_bearer` or `client_credentials`. |
 | `username` | for JWT | Salesforce username for the JWT `sub` (run-as identity). |
-| `scopes` | no | OAuth scopes (Client Credentials ignores request scopes — set on the app). |
+| `scopes` | no | OAuth scopes (Client Credentials ignores request scopes: set on the app). |
 | `token_ttl` | no | Assumed token lifetime; drives cache expiry. Default `15m`. |
 | `ttl` / `max_ttl` | no | Vault lease TTL / max. |
 | `renew_skew` | no | Re-mint this long before expiry. Default `60s`. |
@@ -282,10 +282,10 @@ tutorial for each flow.
 
 ## Roadmap
 
-- [x] Stage 1 — PoC: both flows, caching, leasing; validated end-to-end against a real org.
-- [x] Lifecycle hardening — mint lock, rotate, retry/backoff, graceful degradation.
+- [x] Stage 1: PoC: both flows, caching, leasing; validated end-to-end against a real org.
+- [x] Lifecycle hardening: mint lock, rotate, retry/backoff, graceful degradation.
 - [x] Comprehensive tests + acceptance suite.
-- [x] Security hardening — host allowlist, secret-leak tests, ACL examples.
+- [x] Security hardening: host allowlist, secret-leak tests, ACL examples.
 - [x] CI + multi-arch release.
 
 ## License
