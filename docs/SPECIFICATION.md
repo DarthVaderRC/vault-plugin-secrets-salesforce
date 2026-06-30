@@ -10,7 +10,7 @@ A custom HashiCorp Vault secrets engine for managing Salesforce OAuth 2.0 access
 | **Language** | Go (`github.com/hashicorp/vault/sdk`) |
 | **Supported grant flows (v1)** | JWT Bearer, Client Credentials |
 | **Token lifecycle** | Cache + lease, transparent re-mint near expiry |
-| **Target test environment** | `vault-lab-sandbox` (Vault Enterprise, Docker, Raft) |
+| **Target test environment** | Local Vault server (Docker or `vault server -dev`) |
 
 ---
 
@@ -518,27 +518,27 @@ prevent assertion/credential exfiltration to an attacker-controlled token endpoi
 
 ---
 
-## 9. Configuration & deployment to the sandbox
+## 9. Configuration & deployment to a local Vault
 
-Target: `vault-lab-sandbox` primary container (`vault-ent-primary`, `hashicorp/vault-enterprise:latest`, Raft).
+Target: a local Vault server with an external plugin directory configured (Docker
+container or `vault server -dev`).
 
 ### 9.1 Enable plugin directory (one-time HCL change)
 
-Add to `perf-replication/vault-ent-primary.hcl`:
+Add to your Vault server config (HCL):
 
 ```hcl
 plugin_directory = "/vault/plugins"
 ```
 
-Mount a host plugin dir into the container in
-`shared-vault-environment.sh:shared_env_recreate_primary_container()`:
+If you run Vault in a container, mount a host plugin directory into the container:
 
 ```bash
   -v "${PLUGIN_DIR}:/vault/plugins" \
 ```
 
-(where `PLUGIN_DIR` is e.g. `output/shared-vault-replication/plugins`). Note: the binary
-must be built for the **container's** OS/arch (`linux/amd64` or `linux/arm64`), not macOS.
+(where `PLUGIN_DIR` is a host directory, e.g. `./plugins`). Note: the binary
+must be built for the **server's** OS/arch (`linux/amd64` or `linux/arm64`), not macOS.
 
 ### 9.2 Build the plugin
 
@@ -547,7 +547,7 @@ cd /path/to/sfdc
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
   go build -o dist/vault-plugin-secrets-salesforce ./cmd/vault-plugin-secrets-salesforce
 cp dist/vault-plugin-secrets-salesforce \
-  /path/to/vault-lab-sandbox/output/shared-vault-replication/plugins/
+  /path/to/vault/plugins/
 ```
 
 ### 9.3 Register & enable
@@ -580,7 +580,7 @@ curl -s -H "Authorization: Bearer <access_token>" \
 
 ### 9.5 Local/dev iteration
 
-For fast iteration without the sandbox, run `vault server -dev
+For fast iteration, run `vault server -dev
 -dev-plugin-dir=./dist` and register/enable against the dev server.
 
 ---
@@ -609,12 +609,12 @@ Drive a real in-memory backend (`logical.TestBackendConfig` / `vault.TestCoreUns
 through config → role → creds → renew → revoke, pointed at the mock server via
 `token_url`/`login_url` overrides.
 
-### 10.4 Manual end-to-end runbook (sandbox)
+### 10.4 Manual end-to-end runbook
 
 1. Provision a Salesforce Developer Edition / sandbox org.
 2. Create a Connected App: enable JWT Bearer (upload cert) and/or Client Credentials
    (assign run-as user); pre-authorize the user via a Permission Set.
-3. Deploy the plugin to `vault-lab-sandbox` (§9).
+3. Deploy the plugin to a local Vault server (§9).
 4. Run the §9.4 smoke test for both `jwt_bearer` and `client_credentials` roles.
 5. Confirm caching (`cached:true` on 2nd read), re-mint after `token_ttl`, lease revoke.
 

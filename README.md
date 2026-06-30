@@ -131,8 +131,9 @@ vault plugin register -sha256="$SHA" \
 vault secrets enable -path=salesforce vault-plugin-secrets-salesforce
 ```
 
-For the lab sandbox, `scripts/deploy-sandbox.sh` builds, registers, and
-enables/reloads the plugin in one step (see `docs/E2E-RUNBOOK.md`).
+For a local Vault test environment, `scripts/deploy-sandbox.sh` builds,
+registers, and enables/reloads the plugin in one step (see
+`docs/E2E-RUNBOOK.md`).
 
 ## Run as a container
 

@@ -1,7 +1,7 @@
-# End-to-end runbook (real Salesforce org, via the sandbox)
+# End-to-end runbook (real Salesforce org)
 
 Validates `vault-plugin-secrets-salesforce` against a **real Salesforce org**
-using the `vault-lab-sandbox` Vault Enterprise container. Complete
+using a local Vault server. Complete
 `docs/SALESFORCE-SETUP.md` first.
 
 ## Prerequisites
@@ -9,16 +9,15 @@ using the `vault-lab-sandbox` Vault Enterprise container. Complete
 - Salesforce Connected App configured (see `SALESFORCE-SETUP.md`); you have:
   `LOGIN_URL`, `CONSUMER_KEY`, and either `CONSUMER_SECRET` (Client Credentials)
   or the `sf_jwt.key` PEM + integration `USERNAME` (JWT Bearer).
-- `vault-lab-sandbox` primary container `vault-ent` running and unsealed.
+- A local Vault server running and unsealed, with the plugin registered and
+  enabled (see `scripts/deploy-sandbox.sh`).
 - `vault` CLI on PATH.
 
 ## 0. Environment
 
 ```bash
-export PATH="$HOME/vault-binaries:$PATH"
 export VAULT_ADDR=http://127.0.0.1:8200
-INIT=/path/to/vault-lab-sandbox/output/shared-vault-replication/secrets/vault-ent.init
-export VAULT_TOKEN=$(grep 'Initial Root Token:' "$INIT" | awk '{print $4}')
+export VAULT_TOKEN=<your-vault-token>
 ```
 
 ## 1. Deploy the latest plugin build

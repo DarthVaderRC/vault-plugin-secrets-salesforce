@@ -33,7 +33,7 @@ fmt:
 vet:
 	go vet ./...
 
-## deploy-sandbox: build + register + enable/reload in the lab Vault
+## deploy-sandbox: build + register + enable/reload in a local Vault
 deploy-sandbox:
 	./scripts/deploy-sandbox.sh
 
