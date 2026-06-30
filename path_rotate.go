@@ -29,9 +29,11 @@ func pathRotate(b *backend) []*framework.Path {
 			HelpSynopsis: "Force a fresh Salesforce access token for a role.",
 			HelpDescription: `
 Discards the role's cached token and mints a new one immediately. Subsequent
-reads of creds/<name> serve the new token. Note: previously issued tokens for
-this role remain valid at Salesforce until they expire (the token is shared
-per role; the engine does not call Salesforce's /revoke).
+reads of creds/<name> serve the new token. Previously issued tokens for this
+role remain valid at Salesforce until they expire unless the role sets
+revoke_tokens=true, in which case the engine calls Salesforce's /revoke for the
+outgoing token (which, because the token is shared per role, affects all current
+holders).
 `,
 		},
 	}
@@ -59,6 +61,10 @@ func (b *backend) pathRotate(ctx context.Context, req *logical.Request, data *fr
 	lock := locksutil.LockForKey(b.locks, roleName)
 	lock.Lock()
 	defer lock.Unlock()
+
+	// If the role opts in, invalidate the outgoing token at Salesforce before
+	// dropping it from the cache.
+	b.revokeCachedTokenAtSalesforce(ctx, req.Storage, roleName, role)
 
 	if err := b.deleteCachedToken(ctx, req.Storage, roleName); err != nil {
 		return nil, err

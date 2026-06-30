@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -87,6 +88,35 @@ func requestJWTBearerToken(ctx context.Context, cfg *salesforceConfig, role *sal
 		"assertion":  {assertion},
 	}
 	return doTokenRequest(ctx, cfg, form)
+}
+
+// revokeToken calls the Salesforce /revoke endpoint to invalidate an access
+// token server-side. Salesforce returns HTTP 200 on success. The endpoint shares
+// the (already host-validated) token endpoint base.
+func revokeToken(ctx context.Context, cfg *salesforceConfig, accessToken string) error {
+	if accessToken == "" {
+		return nil
+	}
+	client, err := httpClientFor(cfg)
+	if err != nil {
+		return err
+	}
+	form := url.Values{"token": {accessToken}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.revokeURL(), strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("revoke request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("salesforce revoke returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // Retry policy for transient token-endpoint failures (network errors, HTTP 429,
@@ -185,6 +215,20 @@ func doTokenRequestOnce(ctx context.Context, client *http.Client, cfg *salesforc
 // limiting (429) and transient server errors (5xx).
 func isRetryableStatus(status int) bool {
 	return status == http.StatusTooManyRequests || status >= 500
+}
+
+// isTransientMintError reports whether a token-mint failure is transient
+// (network/transport error, HTTP 429, or 5xx) and therefore safe to ride out by
+// serving a still-valid cached token. A definitive OAuth error (e.g.
+// invalid_grant / invalid_client) is NOT transient: callers should purge the
+// cached token and fail closed rather than keep serving it.
+func isTransientMintError(err error) bool {
+	var sfErr *salesforceError
+	if errors.As(err, &sfErr) {
+		return isRetryableStatus(sfErr.StatusCode)
+	}
+	// Network/transport, parse, or signing errors are treated as transient.
+	return true
 }
 
 // parseTokenError maps a non-200 token response to a salesforceError, surfacing

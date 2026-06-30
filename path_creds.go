@@ -101,9 +101,17 @@ func (b *backend) issueToken(ctx context.Context, s logical.Storage, roleName st
 		return ct, true, nil
 	}
 
-	// Slow path: serialize minting per role.
+	// Slow path: serialize minting per role. Avoid head-of-line blocking: if
+	// another goroutine is already minting for this role and we still hold a
+	// usable (pre-expiry) cached token, serve it rather than block on the mint
+	// round-trip. Only a cold/expired cache waits for the in-flight mint.
 	lock := locksutil.LockForKey(b.locks, roleName)
-	lock.Lock()
+	if !lock.TryLock() {
+		if ct, err := b.getCachedToken(ctx, s, roleName); err == nil && ct != nil && time.Now().Before(ct.ExpiresAt) {
+			return ct, true, nil
+		}
+		lock.Lock()
+	}
 	defer lock.Unlock()
 
 	// Re-check under the lock: another goroutine may have minted while we waited.
@@ -115,13 +123,22 @@ func (b *backend) issueToken(ctx context.Context, s logical.Storage, roleName st
 
 	ct, err := b.mintAndCache(ctx, s, roleName, cfg, role)
 	if err != nil {
-		// Graceful degradation: if minting fails (e.g. Salesforce is briefly
-		// unavailable) but the previously cached token is still valid (not yet
-		// past its true expiry), keep serving it instead of failing the read.
-		if existing, gErr := b.getCachedToken(ctx, s, roleName); gErr == nil && existing != nil && time.Now().Before(existing.ExpiresAt) {
+		// Graceful degradation, but only for transient failures: if minting
+		// fails because Salesforce is briefly unavailable (network/429/5xx) and
+		// the previously cached token is still valid, keep serving it.
+		existing, gErr := b.getCachedToken(ctx, s, roleName)
+		if gErr == nil && existing != nil && time.Now().Before(existing.ExpiresAt) && isTransientMintError(err) {
 			b.Logger().Warn("salesforce token mint failed; serving still-valid cached token",
 				"role", roleName, "error", err.Error(), "expires_at", existing.ExpiresAt)
 			return existing, true, nil
+		}
+		// Definitive failure (e.g. invalid_grant/invalid_client): the cached
+		// token was minted under credentials the server now rejects. Purge it and
+		// fail closed instead of handing out a token the server may have revoked.
+		if !isTransientMintError(err) {
+			if dErr := b.deleteCachedToken(ctx, s, roleName); dErr != nil {
+				return nil, false, dErr
+			}
 		}
 		return nil, false, err
 	}

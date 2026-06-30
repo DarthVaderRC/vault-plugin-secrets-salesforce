@@ -7,10 +7,15 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// rsaKeyCache memoizes parsed RSA private keys by their PEM text so the key is
+// not re-parsed on every mint (a CPU amplifier under load).
+var rsaKeyCache sync.Map // map[string]*rsa.PrivateKey
 
 // buildJWTAssertion creates and RS256-signs the JWT bearer assertion for a role.
 // Claims follow the Salesforce JWT Bearer flow:
@@ -55,11 +60,13 @@ func parseRSAPrivateKey(pemKey string) (*rsa.PrivateKey, error) {
 	if strings.TrimSpace(pemKey) == "" {
 		return nil, fmt.Errorf("no private_key configured")
 	}
-	keyBytes := []byte(pemKey)
-
-	if key, err := jwt.ParseRSAPrivateKeyFromPEM(keyBytes); err == nil {
-		return key, nil
-	} else {
+	if cached, ok := rsaKeyCache.Load(pemKey); ok {
+		return cached.(*rsa.PrivateKey), nil
+	}
+	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(pemKey))
+	if err != nil {
 		return nil, fmt.Errorf("parsing RSA private key: %w", err)
 	}
+	rsaKeyCache.Store(pemKey, key)
+	return key, nil
 }

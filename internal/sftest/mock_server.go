@@ -46,6 +46,8 @@ type MockServer struct {
 	// (decremented per request) before succeeding — used for retry tests.
 	transientFails int
 	transientCode  int
+	// revoke tracking for /services/oauth2/revoke.
+	revokedTokens []string
 }
 
 // New returns a started MockServer. Call Close when done.
@@ -55,6 +57,7 @@ func New() *MockServer {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services/oauth2/token", m.handleToken)
+	mux.HandleFunc("/services/oauth2/revoke", m.handleRevoke)
 	m.Server = httptest.NewServer(mux)
 	m.instanceURL = m.Server.URL // point instance_url at the mock so API calls can hit it too
 	return m
@@ -184,6 +187,35 @@ func (m *MockServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		TokenType:   "Bearer",
 		Scope:       form["scope"],
 	})
+}
+
+// handleRevoke records revoked tokens and returns HTTP 200, mirroring the
+// Salesforce /services/oauth2/revoke endpoint.
+func (m *MockServer) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	m.mu.Lock()
+	m.revokedTokens = append(m.revokedTokens, r.Form.Get("token"))
+	m.mu.Unlock()
+	w.WriteHeader(http.StatusOK)
+}
+
+// RevokedTokens returns a copy of the tokens passed to /revoke.
+func (m *MockServer) RevokedTokens() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, len(m.revokedTokens))
+	copy(out, m.revokedTokens)
+	return out
+}
+
+// RevokeCount returns how many revoke requests have been received.
+func (m *MockServer) RevokeCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.revokedTokens)
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, desc string) {

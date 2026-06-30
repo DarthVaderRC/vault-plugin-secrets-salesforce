@@ -54,3 +54,49 @@ func (b *backend) putCachedToken(ctx context.Context, s logical.Storage, role st
 func (b *backend) deleteCachedToken(ctx context.Context, s logical.Storage, role string) error {
 	return s.Delete(ctx, cacheStoragePrefix+role)
 }
+
+// deleteCachedTokensForConfig clears cached tokens for every role bound to the
+// named config. Used when a config changes (credentials rotated, endpoint
+// repointed) so a stale token minted under the old config is never served.
+func (b *backend) deleteCachedTokensForConfig(ctx context.Context, s logical.Storage, configName string) error {
+	names, err := s.List(ctx, rolesStoragePrefix)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		role, err := b.getRole(ctx, s, name)
+		if err != nil {
+			return err
+		}
+		if role != nil && role.Config == configName {
+			if err := b.deleteCachedToken(ctx, s, name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// revokeCachedTokenAtSalesforce calls the Salesforce /revoke endpoint for the
+// role's currently cached token when the role opts in via revoke_tokens. Because
+// the token is shared across all leases of the role, this invalidates it for
+// every current holder. Errors are logged and swallowed so a lease revoke or
+// rotate is never blocked by a transient Salesforce failure.
+func (b *backend) revokeCachedTokenAtSalesforce(ctx context.Context, s logical.Storage, roleName string, role *salesforceRole) {
+	if role == nil || !role.RevokeTokens {
+		return
+	}
+	ct, err := b.getCachedToken(ctx, s, roleName)
+	if err != nil || ct == nil || ct.AccessToken == "" {
+		return
+	}
+	cfg, err := b.getConfig(ctx, s, role.Config)
+	if err != nil || cfg == nil {
+		return
+	}
+	if err := revokeToken(ctx, cfg, ct.AccessToken); err != nil {
+		b.Logger().Warn("salesforce token revoke failed", "role", roleName, "error", err.Error())
+		return
+	}
+	b.Logger().Info("revoked salesforce token at salesforce", "role", roleName)
+}

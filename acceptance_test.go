@@ -62,6 +62,7 @@ func TestAcceptance_FullLifecycle(t *testing.T) {
 
 	req(&logical.Request{Operation: logical.CreateOperation, Path: "config/acme", Data: map[string]interface{}{
 		"login_url": m.URL(), "token_url": m.TokenURL(), "client_id": "cid", "client_secret": "secret",
+		"allow_non_salesforce_host": true,
 	}})
 	req(&logical.Request{Operation: logical.CreateOperation, Path: "roles/cc", Data: map[string]interface{}{
 		"config": "acme", "grant_type": "client_credentials", "token_ttl": "15m", "ttl": "10m", "max_ttl": "1h",

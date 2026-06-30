@@ -212,22 +212,35 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 | `private_key` | for JWT | PEM RSA private key for assertion signing. **Write-only.** |
 | `token_url` | no | Override the full token endpoint (default `<login_url>/services/oauth2/token`). |
 | `ca_cert` | no | PEM CA bundle to validate the TLS endpoint. |
-| `tls_skip_verify` | no | Disable TLS verification (testing only). Default `false`. |
-| `allow_non_salesforce_host` | no | Permit a non-Salesforce token host (private gateway). Default `false`. |
+| `tls_skip_verify` | no | Disable TLS verification (testing only). Default `false`. Changing this on an existing config requires re-supplying the secret. |
+| `allow_non_salesforce_host` | no | Permit a non-Salesforce token host (private gateway) and loopback. Default `false`. Changing this on an existing config requires re-supplying the secret. |
+
+> **Updating an existing config:** because secrets are write-only and preserved
+> across updates, an update that repoints the endpoint (`token_url`/`login_url`)
+> or relaxes a transport guard (`allow_non_salesforce_host`/`tls_skip_verify`)
+> must re-supply `client_secret` and/or `private_key` in the same request. This
+> stops an update-only principal from redirecting the stored secret to a host
+> they control.
 
 ### `roles/<name>`
 
 | Field | Required | Description |
 |---|---|---|
-| `config` | yes | The `config/<name>` this role uses. |
+| `config` | yes | The `config/<name>` this role uses. **Immutable** after create. |
 | `grant_type` | yes | `jwt_bearer` or `client_credentials`. |
-| `username` | for JWT | Salesforce username for the JWT `sub` (run-as identity). |
+| `username` | for JWT | Salesforce username for the JWT `sub` (run-as identity). **Immutable** after create. |
 | `scopes` | no | OAuth scopes (Client Credentials ignores request scopes: set on the app). |
 | `token_ttl` | no | Assumed token lifetime; drives cache expiry. Default `15m`. |
 | `ttl` / `max_ttl` | no | Vault lease TTL / max. |
-| `renew_skew` | no | Re-mint this long before expiry. Default `60s`. |
+| `renew_skew` | no | Re-mint this long before expiry. Default `60s`. Must be `>= 0` and `< token_ttl`. |
 | `jwt_expiry` | no | JWT `exp` window. Default `3m`, max `5m`. |
 | `audience` | no | Override JWT `aud` (default `login_url`; for many orgs use `https://login.salesforce.com`). |
+| `revoke_tokens` | no | Call Salesforce `/revoke` on lease revoke and rotate. Default `false`. Affects all current holders (the token is shared per role). |
+
+> **Immutable identity:** `username` and `config` cannot be changed on an
+> existing role. To change the Salesforce identity or bound config, delete and
+> recreate the role. This prevents an update-only principal from impersonating a
+> different user or crossing to another tenant's config.
 
 ## Operations
 
@@ -244,13 +257,21 @@ vault lease revoke "$LEASE"   # clears the cached token; next read re-mints
 ## Security
 
 - **Secrets are write-only** and never returned (`read` shows `<redacted>`).
-  Treat `config/*` write access as equivalent to holding those secrets.
+  Treat `config/*` **and** `roles/*` write access as equivalent to holding the
+  brokered secrets: an update-only principal can otherwise repoint the endpoint
+  or change the run-as identity. The engine mitigates this with
+  re-supply-on-sensitive-change and immutable `username`/`config`, but ACLs
+  should still scope mutation to a trusted tier.
 - **Host allowlist** restricts the token endpoint to Salesforce domains by
   default; only relax with `allow_non_salesforce_host=true` for a vetted host.
+  Loopback addresses also require this opt-in.
 - **Least-privilege ACLs:** see **[docs/ACL-EXAMPLES.md](docs/ACL-EXAMPLES.md)**.
-- The same access token is shared by all leases of a role; revoking a lease
-  clears the cache but does **not** call Salesforce `/revoke` (which would
-  break other holders). Use `rotate` to roll the cached token forward.
+  Any `creds/*` policy **must** be mirrored on `token/*` (the alias path), or the
+  ACL is bypassable.
+- The same access token is shared by all leases of a role. Revoking a lease
+  clears the cache; set `revoke_tokens=true` on the role to also call Salesforce
+  `/revoke` (which invalidates the token for **all** current holders). Use
+  `rotate` to roll the cached token forward.
 
 ## Documentation
 

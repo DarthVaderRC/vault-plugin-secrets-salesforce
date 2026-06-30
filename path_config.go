@@ -39,6 +39,16 @@ func (c *salesforceConfig) tokenURL() string {
 	return strings.TrimRight(c.LoginURL, "/") + "/services/oauth2/token"
 }
 
+// revokeURL returns the Salesforce token-revocation endpoint, derived from the
+// effective token endpoint (so it shares the already-validated host).
+func (c *salesforceConfig) revokeURL() string {
+	t := c.tokenURL()
+	if strings.HasSuffix(t, "/token") {
+		return strings.TrimSuffix(t, "/token") + "/revoke"
+	}
+	return strings.TrimRight(c.LoginURL, "/") + "/services/oauth2/revoke"
+}
+
 func pathConfig(b *backend) []*framework.Path {
 	return []*framework.Path{
 		{
@@ -138,7 +148,11 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, dat
 	if err != nil {
 		return nil, err
 	}
-	if cfg == nil {
+	existing := cfg != nil
+	var old salesforceConfig
+	if existing {
+		old = *cfg
+	} else {
 		cfg = &salesforceConfig{}
 	}
 
@@ -151,11 +165,13 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, dat
 	if v, ok := data.GetOk("client_id"); ok {
 		cfg.ClientID = v.(string)
 	}
-	if v, ok := data.GetOk("client_secret"); ok {
-		cfg.ClientSecret = v.(string)
+	_, clientSecretSupplied := data.GetOk("client_secret")
+	if clientSecretSupplied {
+		cfg.ClientSecret = data.Get("client_secret").(string)
 	}
-	if v, ok := data.GetOk("private_key"); ok {
-		cfg.PrivateKey = v.(string)
+	_, privateKeySupplied := data.GetOk("private_key")
+	if privateKeySupplied {
+		cfg.PrivateKey = data.Get("private_key").(string)
 	}
 	if v, ok := data.GetOk("ca_cert"); ok {
 		cfg.CACert = v.(string)
@@ -173,8 +189,38 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, dat
 	if cfg.ClientID == "" {
 		return logical.ErrorResponse("client_id is required"), nil
 	}
+
+	// Re-supply-on-sensitive-change: secret material (client_secret/private_key)
+	// is write-only and preserved across partial updates. To stop an update-only
+	// principal (who can never read the secret) from repointing the destination
+	// or relaxing a transport guard and exfiltrating the preserved secret, an
+	// update that changes the token endpoint or weakens transport security must
+	// re-supply the secret(s) the config holds.
+	if existing && (old.ClientSecret != "" || old.PrivateKey != "") {
+		secretReSupplied := clientSecretSupplied || privateKeySupplied
+		sensitiveChange := cfg.TokenURL != old.TokenURL ||
+			cfg.LoginURL != old.LoginURL ||
+			(cfg.AllowNonSalesforceHost && !old.AllowNonSalesforceHost) ||
+			(cfg.TLSSkipVerify && !old.TLSSkipVerify)
+		if sensitiveChange && !secretReSupplied {
+			return logical.ErrorResponse("this update changes the token endpoint (token_url/login_url) or relaxes a transport guard (allow_non_salesforce_host/tls_skip_verify); re-supply client_secret and/or private_key in the same request to confirm the stored secret may be sent to the new destination"), nil
+		}
+	}
+
 	if err := validateTokenHost(cfg.tokenURL(), cfg.AllowNonSalesforceHost); err != nil {
 		return logical.ErrorResponse(err.Error()), nil
+	}
+
+	// Audit-log security-relevant transitions so they are visible even without a
+	// configured Vault audit device.
+	if oldHost, newHost := hostOf(old.tokenURL()), hostOf(cfg.tokenURL()); existing && oldHost != newHost {
+		b.Logger().Warn("salesforce config token endpoint host changed", "config", name, "old_host", oldHost, "new_host", newHost)
+	}
+	if cfg.TLSSkipVerify && (!existing || !old.TLSSkipVerify) {
+		b.Logger().Warn("salesforce config enables tls_skip_verify (TLS verification disabled)", "config", name)
+	}
+	if cfg.AllowNonSalesforceHost && (!existing || !old.AllowNonSalesforceHost) {
+		b.Logger().Warn("salesforce config allows a non-salesforce token host", "config", name)
 	}
 
 	entry, err := logical.StorageEntryJSON(configStoragePrefix+name, cfg)
@@ -182,6 +228,13 @@ func (b *backend) pathConfigWrite(ctx context.Context, req *logical.Request, dat
 		return nil, err
 	}
 	if err := req.Storage.Put(ctx, entry); err != nil {
+		return nil, err
+	}
+
+	// A config change can alter the credentials or destination used to mint
+	// tokens; drop cached tokens for every role bound to this config so the next
+	// read re-mints under the new config.
+	if err := b.deleteCachedTokensForConfig(ctx, req.Storage, name); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -223,6 +276,9 @@ func (c *salesforceConfig) redactedMap() map[string]interface{} {
 
 func (b *backend) pathConfigDelete(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	name := data.Get("name").(string)
+	if err := b.deleteCachedTokensForConfig(ctx, req.Storage, name); err != nil {
+		return nil, err
+	}
 	if err := req.Storage.Delete(ctx, configStoragePrefix+name); err != nil {
 		return nil, err
 	}

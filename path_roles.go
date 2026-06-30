@@ -31,6 +31,7 @@ type salesforceRole struct {
 	JWTExpiry        time.Duration `json:"jwt_expiry"`
 	Audience         string        `json:"audience"`
 	UseIntrospection bool          `json:"use_introspection"`
+	RevokeTokens     bool          `json:"revoke_tokens"`
 }
 
 func pathRoles(b *backend) []*framework.Path {
@@ -88,7 +89,12 @@ func pathRoles(b *backend) []*framework.Path {
 				},
 				"use_introspection": {
 					Type:        framework.TypeBool,
-					Description: "Validate token expiry via the introspection endpoint. Default false.",
+					Description: "Reserved; not yet implemented (no effect). Token expiry is derived from token_ttl. Default false.",
+					Default:     false,
+				},
+				"revoke_tokens": {
+					Type:        framework.TypeBool,
+					Description: "If true, call the Salesforce /revoke endpoint when a lease is revoked or the role is rotated. Because one token is shared across all leases of a role, revoking one lease revokes the token for all current holders. Default false.",
 					Default:     false,
 				},
 			},
@@ -146,7 +152,11 @@ func (b *backend) pathRoleWrite(ctx context.Context, req *logical.Request, data 
 	if err != nil {
 		return nil, err
 	}
-	if role == nil {
+	existing := role != nil
+	var old salesforceRole
+	if existing {
+		old = *role
+	} else {
 		role = &salesforceRole{}
 	}
 
@@ -189,6 +199,22 @@ func (b *backend) pathRoleWrite(ctx context.Context, req *logical.Request, data 
 	if v, ok := data.GetOk("use_introspection"); ok {
 		role.UseIntrospection = v.(bool)
 	}
+	if v, ok := data.GetOk("revoke_tokens"); ok {
+		role.RevokeTokens = v.(bool)
+	}
+
+	// The Salesforce identity (username -> JWT sub) and the bound config define
+	// the role's security identity. Allowing them to be repointed on update lets
+	// an update-only principal impersonate a different Salesforce user or cross
+	// to another tenant's config. Treat them as immutable; require delete+recreate.
+	if existing {
+		if role.Username != old.Username {
+			return logical.ErrorResponse("username is immutable; delete and recreate the role to change the Salesforce identity"), nil
+		}
+		if role.Config != old.Config {
+			return logical.ErrorResponse("config is immutable; delete and recreate the role to bind a different config"), nil
+		}
+	}
 
 	if errResp := b.validateRole(ctx, req.Storage, role); errResp != nil {
 		return errResp, nil
@@ -200,6 +226,18 @@ func (b *backend) pathRoleWrite(ctx context.Context, req *logical.Request, data 
 	}
 	if err := req.Storage.Put(ctx, entry); err != nil {
 		return nil, err
+	}
+
+	// A role change can alter token parameters; drop the cached token so the next
+	// read re-mints under the updated role.
+	if err := b.deleteCachedToken(ctx, req.Storage, name); err != nil {
+		return nil, err
+	}
+
+	if role.UseIntrospection {
+		resp := &logical.Response{}
+		resp.AddWarning("use_introspection is reserved and currently has no effect; token expiry is derived from token_ttl")
+		return resp, nil
 	}
 	return nil, nil
 }
@@ -218,6 +256,12 @@ func (b *backend) validateRole(ctx context.Context, s logical.Storage, role *sal
 	}
 	if role.JWTExpiry > 5*time.Minute {
 		return logical.ErrorResponse("jwt_expiry (%s) must not exceed 5m (Salesforce rejects assertions further in the future)", role.JWTExpiry)
+	}
+	if role.RenewSkew < 0 {
+		return logical.ErrorResponse("renew_skew (%s) must not be negative", role.RenewSkew)
+	}
+	if role.TokenTTL > 0 && role.RenewSkew >= role.TokenTTL {
+		return logical.ErrorResponse("renew_skew (%s) must be less than token_ttl (%s)", role.RenewSkew, role.TokenTTL)
 	}
 
 	cfg, err := b.getConfig(ctx, s, role.Config)
@@ -264,11 +308,16 @@ func (b *backend) pathRoleRead(ctx context.Context, req *logical.Request, data *
 		"jwt_expiry":        int64(role.JWTExpiry.Seconds()),
 		"audience":          role.Audience,
 		"use_introspection": role.UseIntrospection,
+		"revoke_tokens":     role.RevokeTokens,
 	}}, nil
 }
 
 func (b *backend) pathRoleDelete(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	if err := req.Storage.Delete(ctx, rolesStoragePrefix+data.Get("name").(string)); err != nil {
+	name := data.Get("name").(string)
+	if err := b.deleteCachedToken(ctx, req.Storage, name); err != nil {
+		return nil, err
+	}
+	if err := req.Storage.Delete(ctx, rolesStoragePrefix+name); err != nil {
 		return nil, err
 	}
 	return nil, nil

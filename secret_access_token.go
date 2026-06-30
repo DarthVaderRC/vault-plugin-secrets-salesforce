@@ -31,10 +31,10 @@ func secretAccessToken(b *backend) *framework.Secret {
 	}
 }
 
-// secretAccessTokenRevoke clears the role's cached token. Because the same
-// Salesforce token is shared across all leases of a role, the default revoke
-// behavior is cache-clear only (it does not call Salesforce /revoke, which
-// would invalidate the token for every other holder).
+// secretAccessTokenRevoke clears the role's cached token on lease revoke. If the
+// role sets revoke_tokens=true, it also calls Salesforce /revoke to invalidate
+// the token server-side (which, because the token is shared per role, affects
+// every current holder).
 func (b *backend) secretAccessTokenRevoke(ctx context.Context, req *logical.Request, _ *framework.FieldData) (*logical.Response, error) {
 	roleRaw, ok := req.Secret.InternalData["role"]
 	if !ok {
@@ -43,6 +43,9 @@ func (b *backend) secretAccessTokenRevoke(ctx context.Context, req *logical.Requ
 	role, ok := roleRaw.(string)
 	if !ok || role == "" {
 		return nil, nil
+	}
+	if roleObj, err := b.getRole(ctx, req.Storage, role); err == nil {
+		b.revokeCachedTokenAtSalesforce(ctx, req.Storage, role, roleObj)
 	}
 	if err := b.deleteCachedToken(ctx, req.Storage, role); err != nil {
 		return nil, err

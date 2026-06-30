@@ -54,6 +54,7 @@ func TestCreds_JWTBearer_EndToEnd(t *testing.T) {
 		Data: map[string]interface{}{
 			"login_url": m.URL(), "token_url": m.TokenURL(),
 			"client_id": "consumer-key", "private_key": keyPEM,
+			"allow_non_salesforce_host": true,
 		},
 	}); err != nil {
 		t.Fatalf("config write: %v", err)
@@ -115,6 +116,7 @@ func TestCreds_JWTBearer_RejectedAssertion(t *testing.T) {
 		Data: map[string]interface{}{
 			"login_url": m.URL(), "token_url": m.TokenURL(),
 			"client_id": "ck", "private_key": keyPEM,
+			"allow_non_salesforce_host": true,
 		},
 	}); err != nil {
 		t.Fatalf("config write: %v", err)

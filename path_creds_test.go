@@ -21,17 +21,18 @@ func setupCC(t *testing.T, m *sftest.MockServer, tokenTTL string) (*backend, log
 	b, storage := testBackend(t)
 	ctx := context.Background()
 
-	if _, err := b.HandleRequest(ctx, &logical.Request{
+	if resp, err := b.HandleRequest(ctx, &logical.Request{
 		Operation: logical.CreateOperation, Path: "config/acme", Storage: storage,
 		Data: map[string]interface{}{
 			"login_url": m.URL(), "token_url": m.TokenURL(),
 			"client_id": "cid", "client_secret": "secret",
+			"allow_non_salesforce_host": true,
 		},
-	}); err != nil {
-		t.Fatalf("config write failed: %v", err)
+	}); err != nil || (resp != nil && resp.IsError()) {
+		t.Fatalf("config write failed: err=%v resp=%v", err, resp)
 	}
 
-	data := map[string]interface{}{"config": "acme", "grant_type": "client_credentials", "scopes": "api"}
+	data := map[string]interface{}{"config": "acme", "grant_type": "client_credentials", "scopes": "api", "renew_skew": "0"}
 	if tokenTTL != "" {
 		data["token_ttl"] = tokenTTL
 	}
@@ -144,11 +145,12 @@ func TestCreds_ConcurrentReadsMintOnce(t *testing.T) {
 func TestCreds_RemintsWhenStale(t *testing.T) {
 	m := sftest.New()
 	defer m.Close()
-	// token_ttl is 1s and renew_skew default is 60s, so the token is considered
-	// stale immediately and every read re-mints.
+	// token_ttl is 1s with renew_skew 0, so after the token's lifetime elapses
+	// the cached token is stale and the next read re-mints.
 	b, storage := setupCC(t, m, "1s")
 
 	readCreds(t, b, storage)
+	time.Sleep(1100 * time.Millisecond)
 	readCreds(t, b, storage)
 
 	if m.MintCount() < 2 {
@@ -264,6 +266,7 @@ func TestRenew_ExtendsLeaseWithRoleTTLs(t *testing.T) {
 		Data: map[string]interface{}{
 			"login_url": m.URL(), "token_url": m.TokenURL(),
 			"client_id": "cid", "client_secret": "secret",
+			"allow_non_salesforce_host": true,
 		},
 	}); err != nil {
 		t.Fatalf("config write failed: %v", err)

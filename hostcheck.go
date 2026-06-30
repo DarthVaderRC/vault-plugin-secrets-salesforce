@@ -40,8 +40,17 @@ func validateTokenHost(rawURL string, allowNonSalesforce bool) error {
 		return fmt.Errorf("token endpoint must use https, got scheme %q", u.Scheme)
 	}
 
-	if allowNonSalesforce || loopback {
+	if allowNonSalesforce {
 		return nil
+	}
+
+	// Loopback waives the https requirement (for httptest servers) but does NOT
+	// bypass the host allowlist: sending secrets to a loopback listener on the
+	// Vault host is only permitted when the operator explicitly opts in via
+	// allow_non_salesforce_host. This prevents an update-only principal from
+	// exfiltrating secrets to a co-located listener.
+	if loopback {
+		return fmt.Errorf("token endpoint host %q is loopback; set allow_non_salesforce_host=true to permit a non-Salesforce host", host)
 	}
 
 	for _, suffix := range salesforceHostSuffixes {
@@ -51,6 +60,16 @@ func validateTokenHost(rawURL string, allowNonSalesforce bool) error {
 	}
 	return fmt.Errorf("token endpoint host %q is not an allowed Salesforce domain (allowed suffixes: %s); set allow_non_salesforce_host=true to override",
 		host, strings.Join(salesforceHostSuffixes, ", "))
+}
+
+// hostOf returns the lowercased hostname of a URL, or "" if it cannot be parsed.
+// Used for audit logging of endpoint changes.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 func isLoopbackHost(host string) bool {

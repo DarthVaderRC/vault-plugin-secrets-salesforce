@@ -76,12 +76,20 @@ path "salesforce/roles/+/rotate" {
 
 ## Notes
 
-- **Configs hold secrets.** The Consumer Secret and JWT private key are write-only
-  and never returned (`read` shows `<redacted>`), but treat `config/*` write access
-  as equivalent to holding those secrets.
+- **Mutation capability ≈ secret access.** The Consumer Secret and JWT private
+  key are write-only and never returned (`read` shows `<redacted>`), but treat
+  `config/*` **and** `roles/*` write access as equivalent to holding the brokered
+  secrets. An update-only principal can otherwise repoint the token endpoint or
+  change the run-as identity to exfiltrate or misuse them. The engine adds
+  guardrails (re-supply-on-sensitive-change; immutable `username`/`config`), but
+  scope mutation capabilities to a trusted tier regardless.
+- **Mirror `creds/*` policies on `token/*`.** The path `salesforce/token/<name>`
+  is a functional alias of `salesforce/creds/<name>`. A `deny` or omission on
+  `creds/*` is bypassable via `token/*` unless you apply the **same** rule to
+  both paths (see the examples above, which grant both).
 - **Lease management.** Token reads issue leases. Consumers that need to revoke
   early require `update` on `sys/leases/revoke` (or use the lease's own revoke).
 - **Least privilege.** Prefer per-role `creds/<name>` grants over `creds/*`.
 - **Host allowlist.** By default the engine refuses token endpoints outside
-  `*.salesforce.com` / `*.force.com`. Only set `allow_non_salesforce_host=true`
-  for a vetted private gateway.
+  `*.salesforce.com` / `*.force.com` / `*.salesforce.mil`, including loopback.
+  Only set `allow_non_salesforce_host=true` for a vetted private gateway.
