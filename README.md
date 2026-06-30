@@ -59,19 +59,51 @@ are centrally controlled.
 
 ## Architecture
 
+The engine sits between Vault clients and Salesforce's OAuth token endpoint. It
+stores connection secrets and role definitions in the Vault barrier, brokers
+short-lived access tokens on read, and caches one token per role.
+
 ```
-config/<name>     roles/<name>            creds/<name>  (read)
- (secrets)   <--   (flow + identity   -->  issue/cache/lease a token
- login_url         + TTLs, bound to        |
- client_id         a config)               +-- cache/<role> in barrier
- client_secret                             +-- lease (renew/revoke)
- private_key
+   Vault clients            Salesforce secrets engine             Salesforce
+                             (mounted at  salesforce/ )            org / app
+                          ┌───────────────────────────────┐
+   admin  ──── write ───► │ config/<name>                 │
+   (secrets)              │   login_url, client_id,       │
+                          │   client_secret | private_key │
+                          ├───────────────────────────────┤
+   operator ── write ───► │ roles/<name>   (+ .../rotate) │
+   (flow + TTLs)          │   grant_type, username,       │
+                          │   scopes, ttl, renew_skew     │
+                          ├───────────────────────────────┤        ┌─────────────────────┐
+   app /  ──── read ────► │ creds/<name>  (alias token/)  │        │ POST /oauth2/token  │
+   workload               │   1. fresh cached token?      │        │      /oauth2/revoke │
+          ◄── leased ──── │   2. else mint via the flow ──┼───────►│ RS256 JWT assertion │
+              token       │   3. cache + return a lease   │◄───────│ or client secret    │
+                          └───────────────┬───────────────┘  HTTPS └─────────────────────┘
+                                          │ persisted in
+                                          ▼
+                          ┌───────────────────────────────┐
+                          │ Vault encrypted barrier       │
+                          │   config/<name>   secrets     │
+                          │   role/<name>     definition  │
+                          │   cache/<role>    token       │
+                          └───────────────────────────────┘
 ```
 
-- **config/** holds connection + secret material for one Salesforce org/app.
-- **roles/** binds a config to a grant flow, identity, scopes, and TTLs.
-- **creds/** (and alias **token/**) issues a leased access token for a role.
-- **roles/\<name\>/rotate** discards the cached token and mints a fresh one.
+Outbound token and revoke calls go over HTTPS to the config's host, which is
+restricted to Salesforce domains by default (`allow_non_salesforce_host` opts
+out for a vetted private gateway).
+
+- **config/** holds connection and secret material for one Salesforce org/app.
+  Secrets are write-only and redacted on read.
+- **roles/** binds a config to a grant flow, run-as identity, scopes, and TTLs.
+- **creds/** (and alias **token/**) issues a leased access token for a role:
+  serve the fresh cached token, or mint a new one via the role's flow, then cache
+  it and return a Vault lease.
+- **roles/\<name\>/rotate** discards the cached token and mints a fresh one;
+  with `revoke_tokens=true` it also revokes the outgoing token at Salesforce.
+- A per-role **mint lock** ensures a burst of cold-cache reads triggers exactly
+  one token request rather than a stampede.
 
 ## Quick start
 
@@ -300,7 +332,6 @@ tutorial for each flow.
 | [docs/E2E-RUNBOOK.md](docs/E2E-RUNBOOK.md) | Deploy + run both flows against a real org. |
 | [docs/ACL-EXAMPLES.md](docs/ACL-EXAMPLES.md) | Example Vault policies. |
 | [docs/SPECIFICATION.md](docs/SPECIFICATION.md) | Full RFC-style design spec. |
-| [docs/analysis-of-salesforce-api-limits.md](docs/analysis-of-salesforce-api-limits.md) | Salesforce limits analysis (no blockers). |
 
 ## Roadmap
 
