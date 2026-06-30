@@ -93,8 +93,8 @@ To check how many concurrent access tokens the org allows per user/app:
 2. Mint several tokens for the same role/user; in Salesforce, open the
    integration user → **OAuth Connected Apps** / Setup → **Connected Apps OAuth
    Usage** to observe active tokens and whether older ones are revoked.
-3. Record the observed cap in `docs/analysis-of-salesforce-api-limits.md`
-   (replaces the unverified "5" with the measured value).
+3. Record the observed cap for your own reference (replaces the unverified "5"
+   with the measured value).
 
 ## 6. Expected results checklist
 
