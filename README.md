@@ -63,32 +63,7 @@ The engine sits between Vault clients and Salesforce's OAuth token endpoint. It
 stores connection secrets and role definitions in the Vault barrier, brokers
 short-lived access tokens on read, and caches one token per role.
 
-```
-   Vault clients            Salesforce secrets engine             Salesforce
-                             (mounted at  salesforce/ )            org / app
-                          ┌───────────────────────────────┐
-   admin  ──── write ───► │ config/<name>                 │
-   (secrets)              │   login_url, client_id,       │
-                          │   client_secret | private_key │
-                          ├───────────────────────────────┤
-   operator ── write ───► │ roles/<name>   (+ .../rotate) │
-   (flow + TTLs)          │   grant_type, username,       │
-                          │   scopes, ttl, renew_skew     │
-                          ├───────────────────────────────┤        ┌─────────────────────┐
-   app /  ──── read ────► │ creds/<name>  (alias token/)  │        │ POST /oauth2/token  │
-   workload               │   1. fresh cached token?      │        │      /oauth2/revoke │
-          ◄── leased ──── │   2. else mint via the flow ──┼───────►│ RS256 JWT assertion │
-              token       │   3. cache + return a lease   │◄───────│ or client secret    │
-                          └───────────────┬───────────────┘  HTTPS └─────────────────────┘
-                                          │ persisted in
-                                          ▼
-                          ┌───────────────────────────────┐
-                          │ Vault encrypted barrier       │
-                          │   config/<name>   secrets     │
-                          │   role/<name>     definition  │
-                          │   cache/<role>    token       │
-                          └───────────────────────────────┘
-```
+![Architecture: Vault clients broker short-lived Salesforce OAuth tokens through the secrets engine](docs/images/architecture.svg)
 
 Outbound token and revoke calls go over HTTPS to the config's host, which is
 restricted to Salesforce domains by default (`allow_non_salesforce_host` opts
