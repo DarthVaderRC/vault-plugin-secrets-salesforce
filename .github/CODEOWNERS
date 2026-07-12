@@ -1,0 +1,8 @@
+# Code owners for vault-plugin-secrets-salesforce
+#
+# The owner(s) listed here are automatically requested for review on any pull
+# request that touches matching files. Combined with branch protection
+# ("Require review from Code Owners"), this gates all changes to `main`.
+
+# Default owner for everything in the repository.
+* @DarthVaderRC
