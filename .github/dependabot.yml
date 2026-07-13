@@ -12,6 +12,18 @@ updates:
       - go
     commit-message:
       prefix: "deps"
+    groups:
+      go-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+      go-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # GitHub Actions workflow dependencies
   - package-ecosystem: github-actions
@@ -25,3 +37,7 @@ updates:
       - github-actions
     commit-message:
       prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
