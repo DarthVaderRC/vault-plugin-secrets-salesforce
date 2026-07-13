@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/hashicorp/vault/api v1.16.0
+	github.com/hashicorp/vault/api v1.23.0
 	github.com/hashicorp/vault/sdk v0.25.1
 )
 
@@ -65,7 +65,7 @@ require (
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.1 // indirect
+	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/joshlf/go-acl v0.0.0-20200411065538-eae00ae38531 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
